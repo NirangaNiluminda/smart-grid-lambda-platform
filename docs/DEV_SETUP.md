@@ -12,8 +12,8 @@
 ## First run (Part 1)
 
 ```bash
-git clone <repo-url> smart-grid-data-platform
-cd smart-grid-data-platform
+git clone https://github.com/NirangaNiluminda/smart-grid-lambda-platform.git
+cd smart-grid-lambda-platform
 
 cp .env.example .env            # tweak SIM_DAY_SECONDS etc. if you like
 

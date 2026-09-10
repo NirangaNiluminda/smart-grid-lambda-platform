@@ -1,6 +1,9 @@
-# Smart Grid Energy Monitoring & Billing — Data Platform
+# Smart Grid Lambda Platform
 
-EC8203 *Applied Big Data Engineering* — Mini Project.
+EC8203 *Applied Big Data Engineering* — Mini Project ·
+<https://github.com/NirangaNiluminda/smart-grid-lambda-platform>
+
+Smart Grid Energy Monitoring & Billing.
 
 An end-to-end **Lambda architecture** data platform that ingests smart-meter
 readings in real time, serves live grid-load and renewable-mix metrics by zone,
@@ -67,6 +70,8 @@ docs/                   Plan, architecture, contracts, onboarding, report outlin
 ## Quick start (Part 1 — available now)
 
 ```bash
+git clone https://github.com/NirangaNiluminda/smart-grid-lambda-platform.git
+cd smart-grid-lambda-platform
 cp .env.example .env
 make install        # local .venv for tests + tooling
 make test           # unit tests, no infrastructure needed

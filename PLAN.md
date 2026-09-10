@@ -298,7 +298,7 @@ Detail in [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md). Minimums:
 
 ## 14. Deliverables checklist (submission)
 
-- [ ] Git repository link (private, graders added).
+- [ ] Git repository link (private, graders added): <https://github.com/NirangaNiluminda/smart-grid-lambda-platform>.
 - [ ] Report PDF, 8–15 pages, following `docs/REPORT_OUTLINE.md`.
 - [ ] 5–10 min demo video showing the pipeline end-to-end + observability, **or** a live demo ready.
 - [ ] Assumptions / simplifications / simulated-time compression stated (README + report §1).
