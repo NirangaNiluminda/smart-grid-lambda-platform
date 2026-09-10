@@ -1,0 +1,45 @@
+# Workspace-level configuration for shared developer tooling.
+# Each service and library carries its own pyproject.toml with its runtime
+# dependencies; this file only configures lint / type-check / test behaviour
+# so every package in the monorepo is checked the same way.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["orchestration/airflow/logs", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+ignore = ["B008"]  # FastAPI dependency-injection idiom
+
+[tool.ruff.lint.isort]
+# energy_common is a pip-installed shared package -> group it with third-party.
+# Each service's own package is auto-detected as first-party.
+known-third-party = ["energy_common"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["E501"]  # test data / assertions read better unwrapped
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+exclude = ["tests/", "build/"]
+
+[[tool.mypy.overrides]]
+module = ["confluent_kafka.*", "pyarrow.*", "prometheus_client.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "-ra -q --strict-markers --import-mode=importlib"
+testpaths = ["libs", "services"]
+markers = [
+    "integration: tests that need live infrastructure (Kafka, Postgres); excluded from the default unit run",
+]
+filterwarnings = ["error"]
