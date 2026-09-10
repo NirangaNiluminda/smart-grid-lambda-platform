@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ingestion"
+version = "1.0.0"
+description = "Kafka meter.readings -> immutable partitioned Parquet master dataset (Lambda batch-layer source of truth), with DLQ."
+requires-python = ">=3.11"
+dependencies = ["energy-common[kafka,parquet]>=1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2", "pytest-cov>=5.0", "ruff>=0.6", "mypy>=1.11"]
+
+[project.scripts]
+ingestion = "ingestion.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ingestion"]
