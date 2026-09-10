@@ -1,0 +1,138 @@
+# Part 1 stack: message bus, serving store, metrics, the two simulated sources,
+# and ingestion into the Parquet master dataset.
+#
+#   docker compose -f infra/docker-compose.yml up -d --build
+#
+# Part 2 services are added by infra/docker-compose.part2.yml (make up-full).
+# Run compose from the repo root so ${VAR} substitution picks up ./.env.
+
+name: smart-grid
+
+x-sim-env: &sim-env
+  SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-600}
+  SIM_START_DATE: ${SIM_START_DATE:-2026-01-01}
+  SIM_SEED: ${SIM_SEED:-42}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+
+services:
+  kafka:
+    image: apache/kafka:3.8.1
+    container_name: sg-kafka
+    ports:
+      - "19092:19092" # host listener for local tools / running a service outside compose
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: sg-kraft-cluster-0001
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sg-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${PG_USER:-energy}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-energy}
+      POSTGRES_DB: ${PG_DATABASE:-energy_serving}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-energy} -d ${PG_DATABASE:-energy_serving}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ../data/seed:/seed:ro
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: sg-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+
+  meter-simulator:
+    build:
+      context: ..
+      dockerfile: services/meter-simulator/Dockerfile
+    container_name: sg-meter-simulator
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *sim-env
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_READINGS_TOPIC: ${KAFKA_READINGS_TOPIC:-meter.readings}
+      SIM_HOUSEHOLD_COUNT: ${SIM_HOUSEHOLD_COUNT:-200}
+      SIM_EMIT_INTERVAL_SECONDS: ${SIM_EMIT_INTERVAL_SECONDS:-2}
+      SIM_ANOMALY_RATE: ${SIM_ANOMALY_RATE:-0.02}
+      SEED_HOUSEHOLDS_CSV: /app/data/seed/households.csv
+      METRICS_PORT: 9101
+    ports:
+      - "9101:9101"
+    volumes:
+      - ../data/seed:/app/data/seed:ro
+
+  batch-file-generator:
+    build:
+      context: ..
+      dockerfile: services/batch-file-generator/Dockerfile
+    container_name: sg-batch-file-generator
+    environment:
+      <<: *sim-env
+      LANDING_ROOT: /data/landing
+      SEED_HOUSEHOLDS_CSV: /app/data/seed/households.csv
+      METRICS_PORT: 9103
+    ports:
+      - "9103:9103"
+    volumes:
+      - ../data/landing:/data/landing
+      - ../data/seed:/app/data/seed:ro
+
+  ingestion:
+    build:
+      context: ..
+      dockerfile: services/ingestion/Dockerfile
+    container_name: sg-ingestion
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *sim-env
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_READINGS_TOPIC: ${KAFKA_READINGS_TOPIC:-meter.readings}
+      KAFKA_READINGS_DLQ_TOPIC: ${KAFKA_READINGS_DLQ_TOPIC:-meter.readings.dlq}
+      KAFKA_CONSUMER_GROUP_INGESTION: ${KAFKA_CONSUMER_GROUP_INGESTION:-ingestion-raw-lake}
+      LAKE_ROOT: /data/lake
+      METRICS_PORT: 9102
+    ports:
+      - "9102:9102"
+    volumes:
+      - ../data/lake:/data/lake
+
+volumes:
+  kafka-data:
+  pg-data:

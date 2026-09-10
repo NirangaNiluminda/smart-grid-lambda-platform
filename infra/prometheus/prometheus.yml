@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # --- Part 1 ---
+  - job_name: meter-simulator
+    static_configs:
+      - targets: ["meter-simulator:9101"]
+  - job_name: ingestion
+    static_configs:
+      - targets: ["ingestion:9102"]
+  - job_name: batch-file-generator
+    static_configs:
+      - targets: ["batch-file-generator:9103"]
+
+  # --- Part 2 (targets resolve once infra/docker-compose.part2.yml is up) ---
+  - job_name: stream-processor
+    static_configs:
+      - targets: ["stream-processor:9111"]
+  - job_name: batch-processor
+    static_configs:
+      - targets: ["batch-processor:9112"]
+  - job_name: serving-api
+    static_configs:
+      - targets: ["serving-api:8000"]
+  - job_name: alert-engine
+    static_configs:
+      - targets: ["alert-engine:9114"]

@@ -1,0 +1,7 @@
+grid_zone,name,region,meter_capacity
+zone-north,Northern Industrial,North,1800
+zone-south,Southern Suburbs,South,1500
+zone-east,Eastern Residential,East,1400
+zone-west,Western Mixed,West,1600
+zone-central,Central Business District,Central,2200
+zone-coastal,Coastal Villages,Coast,900
