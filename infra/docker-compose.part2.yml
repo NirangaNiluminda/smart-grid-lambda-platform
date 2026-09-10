@@ -1,0 +1,111 @@
+# Part 2 overlay — added on top of infra/docker-compose.yml.
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.part2.yml up -d --build
+#   (or: make up-full)
+#
+# Every service here is a Part 2 skeleton (Dev B). They start, print guidance and
+# exit non-zero until implemented — that is intentional, so `make up-full` shows
+# exactly what is left to build. Dev B fills in the build/command details and the
+# healthchecks as each service comes online.
+
+name: smart-grid
+
+services:
+  stream-processor:
+    build:
+      context: ..
+      dockerfile: services/stream-processor/Dockerfile
+    container_name: sg-stream-processor
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PG_DSN: postgresql://energy:energy@postgres:5432/energy_serving
+      LAKE_ROOT: /data/lake
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    ports: ["9111:9111"]
+    volumes:
+      - ../data:/data
+    restart: on-failure
+
+  batch-processor:
+    build:
+      context: ..
+      dockerfile: services/batch-processor/Dockerfile
+    container_name: sg-batch-processor
+    profiles: ["manual"]   # invoked by Airflow / on demand, not a long-running service
+    environment:
+      PG_DSN: postgresql://energy:energy@postgres:5432/energy_serving
+      LAKE_ROOT: /data/lake
+      LANDING_ROOT: /data/landing
+    volumes:
+      - ../data:/data
+      - ../reports:/app/reports
+
+  serving-api:
+    build:
+      context: ..
+      dockerfile: services/serving-api/Dockerfile
+    container_name: sg-serving-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_DSN: postgresql://serving_ro:serving_ro@postgres:5432/energy_serving
+      API_PORT: 8000
+    ports: ["8000:8000"]
+    restart: on-failure
+
+  alert-engine:
+    build:
+      context: ..
+      dockerfile: services/alert-engine/Dockerfile
+    container_name: sg-alert-engine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_DSN: postgresql://energy:energy@postgres:5432/energy_serving
+      PROMETHEUS_URL: http://prometheus:9090
+      ALERT_NO_DATA_MINUTES: ${ALERT_NO_DATA_MINUTES:-3}
+      ALERT_LOW_RENEWABLE_PCT: ${ALERT_LOW_RENEWABLE_PCT:-15}
+      ALERT_MAX_REJECT_RATE: ${ALERT_MAX_REJECT_RATE:-0.05}
+    ports: ["9114:9114"]
+    restart: on-failure
+
+  airflow:
+    image: apache/airflow:2.10.2-python3.11
+    container_name: sg-airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://energy:energy@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+    ports: ["8080:8080"]
+    volumes:
+      - ../orchestration/airflow/dags:/opt/airflow/dags:ro
+      - ../data:/data
+      - ../reports:/opt/airflow/reports
+    # Dev B: switch to the standard webserver+scheduler+init split; `standalone`
+    # is fine for a first bring-up.
+    command: ["standalone"]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: sg-grafana
+    profiles: ["dashboards"]
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    ports: ["3000:3000"]
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
