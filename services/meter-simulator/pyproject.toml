@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "meter-simulator"
+version = "1.0.0"
+description = "Streaming source: simulated smart-meter readings -> Kafka meter.readings."
+requires-python = ">=3.11"
+# energy-common is a local sibling package. Install it first:
+#   pip install -e "libs/common[kafka]"   (make install / the Dockerfile do this)
+dependencies = [
+    "energy-common>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2", "pytest-cov>=5.0", "ruff>=0.6", "mypy>=1.11"]
+
+[project.scripts]
+meter-simulator = "meter_simulator.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/meter_simulator"]
