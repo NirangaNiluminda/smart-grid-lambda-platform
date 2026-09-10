@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "batch-file-generator"
+version = "1.0.0"
+description = "Daily batch source: drops tariff + weather reference files into the landing zone once per simulated day."
+requires-python = ">=3.11"
+# Install energy-common first (make install / the Dockerfile handle ordering).
+dependencies = ["energy-common>=1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2", "pytest-cov>=5.0", "ruff>=0.6", "mypy>=1.11"]
+
+[project.scripts]
+batch-file-generator = "batch_file_generator.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/batch_file_generator"]
