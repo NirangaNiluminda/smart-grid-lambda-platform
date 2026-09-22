@@ -1,22 +1,42 @@
-"""Entrypoint — NOT YET IMPLEMENTED (Part 2, Dev B). See docs/PART2_ONBOARDING.md §B5."""
+"""Entrypoint for alert-engine service."""
 
 from __future__ import annotations
 
+import datetime as dt
 import sys
+import time
 
-_GUIDANCE = """
-alert-engine is a Part 2 skeleton.
+from energy_common import get_logger
+from energy_common.simclock import business_date_for
 
-  What it must do : evaluate alert-rule Strategies over Postgres + Prometheus on a
-                    schedule; dedupe; fan out to DB / log / webhook sinks.
-  Where to start  : docs/PART2_ONBOARDING.md  §B5
-  Rules           : docs/OBSERVABILITY.md     §3
-"""
+from alert_engine.composition import build_engine
+from alert_engine.config import load_settings
+from alert_engine.domain.rules import RuleContext
+
+logger = get_logger("alert-engine")
 
 
 def main() -> int:
-    print(_GUIDANCE, file=sys.stderr)
-    raise NotImplementedError("alert-engine: implement application/evaluator.py (Part 2 §B5)")
+    try:
+        settings = load_settings()
+        engine = build_engine(settings)
+        logger.info("alert_engine.started", interval=settings.evaluation_interval_seconds)
+
+        while True:
+            now = dt.datetime.now(dt.UTC)
+            bdate = business_date_for(now)
+            ctx = RuleContext(
+                now=now,
+                current_business_date=bdate,
+            )
+            engine.evaluate_cycle(ctx)
+            time.sleep(settings.evaluation_interval_seconds)
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("alert_engine.stopped")
+        return 0
+    except Exception as exc:
+        logger.exception("alert_engine.fatal", error=str(exc))
+        return 1
 
 
 if __name__ == "__main__":
