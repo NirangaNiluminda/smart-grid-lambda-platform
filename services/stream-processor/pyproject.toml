@@ -5,10 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "stream-processor"
 version = "0.1.0"
-description = "Lambda speed layer: Spark Structured Streaming meter.readings -> rt_zone_metrics. [Part 2 skeleton]"
+description = "Lambda speed layer: Spark Structured Streaming meter.readings -> rt_zone_metrics."
 requires-python = ">=3.11"
+# Kafka I/O goes through Spark's own connector (spark-sql-kafka-0-10, pulled at
+# runtime via spark.jars.packages) -- confluent-kafka is not needed here.
 dependencies = [
-    "energy-common[kafka,postgres]>=1.0",
+    "energy-common[postgres]>=1.0",
     "pyspark>=3.5,<3.6",
 ]
 

@@ -1,4 +1,10 @@
-"""stream-processor configuration (ready for Part 2 to use)."""
+"""stream-processor configuration.
+
+Spark runs in **local mode** inside this one container (`spark://` master not
+required) — appropriate at this project's data volume; see
+`docs/ARCHITECTURE.md`'s production-scale notes for how this would change
+(a real cluster / `spark-submit --master yarn|k8s://...`) at production scale.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +25,11 @@ class Settings(BaseServiceSettings):
 
     pg_dsn: str = "postgresql://energy:energy@postgres:5432/energy_serving"
 
-    checkpoint_dir: Path = Path("/data/checkpoints/stream-processor")
+    spark_master: str = "local[*]"
+    spark_shuffle_partitions: int = Field(default=4, gt=0)
+    checkpoint_root: Path = Path("/data/checkpoints/stream-processor")
+    trigger_interval_seconds: float = Field(default=5.0, gt=0)
+
     watermark_minutes: int = Field(default=2, gt=0)
     tumbling_window_seconds: int = 60
     sliding_window_seconds: int = 300

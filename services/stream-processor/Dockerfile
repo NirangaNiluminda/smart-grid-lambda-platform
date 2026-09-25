@@ -1,16 +1,25 @@
 # syntax=docker/dockerfile:1
-# Part 2 skeleton image. Dev B: add any service-specific system deps (e.g. a JRE
-# for Spark on stream-processor / batch-processor) as the implementation lands.
+# Spark Structured Streaming needs a JVM; python:3.11-slim doesn't ship one.
 FROM python:3.11-slim
 
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    PYSPARK_PYTHON=/usr/local/bin/python3 \
+    PYSPARK_DRIVER_PYTHON=/usr/local/bin/python3
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY libs/common /app/libs/common
 COPY services/stream-processor /app/services/stream-processor
 
 RUN pip install --upgrade pip \
- && pip install "/app/libs/common[kafka,postgres]" \
+ && pip install "/app/libs/common[postgres]" \
  && pip install /app/services/stream-processor
 
 EXPOSE 9111
