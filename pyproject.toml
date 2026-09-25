@@ -25,7 +25,11 @@ line-length = 100
 target-version = ["py311"]
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12 here only controls which typeshed/stub syntax mypy parses (needed for
+# numpy's stubs, pulled in transitively via pyspark) -- the project itself
+# still targets/requires >=3.11 (see each package's pyproject.toml) and uses
+# no 3.12-only runtime features.
+python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 disallow_untyped_defs = true
@@ -33,12 +37,21 @@ plugins = ["pydantic.mypy"]
 exclude = ["tests/", "build/"]
 
 [[tool.mypy.overrides]]
-module = ["confluent_kafka.*", "pyarrow.*", "prometheus_client.*"]
+module = ["confluent_kafka.*", "pyarrow.*", "prometheus_client.*", "pyspark.*", "httpx.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# numpy's stubs (pulled in transitively via pyspark's pandas-on-Spark module)
+# use PEP 695 syntax that only parses under python_version >= 3.12. Nothing in
+# this project imports numpy directly; suppress errors from its stub file
+# rather than bumping the project's target version for an unused dependency.
+module = "numpy.*"
+ignore_missing_imports = true
+ignore_errors = true
 
 [tool.pytest.ini_options]
 addopts = "-ra -q --strict-markers --import-mode=importlib"
-testpaths = ["libs", "services"]
+testpaths = ["libs", "services", "orchestration", "tests"]
 markers = [
     "integration: tests that need live infrastructure (Kafka, Postgres); excluded from the default unit run",
 ]
@@ -47,4 +60,7 @@ filterwarnings = [
     "ignore::DeprecationWarning:anyio.*",
     "ignore::DeprecationWarning:starlette.*",
     "ignore::starlette.exceptions.StarletteDeprecationWarning",
+    # py4j's gateway sockets get garbage-collected off the main thread; the
+    # resulting ResourceWarning is pyspark/py4j internals, not project code.
+    "ignore::ResourceWarning",
 ]
