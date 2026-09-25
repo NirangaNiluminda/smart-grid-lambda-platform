@@ -14,6 +14,7 @@ from collections.abc import Callable
 from energy_common.domain.ports import Clock, LandingZone
 from energy_common.observability import bind_context, counter, get_logger
 
+from batch_file_generator.adapters.airflow_trigger import DagTrigger, NullDagTrigger
 from batch_file_generator.domain.reference_data import (
     TARIFF_HEADER,
     WEATHER_HEADER,
@@ -38,6 +39,7 @@ class GeneratorLoop:
         seed: int = 42,
         sleep: Callable[[float], None] | None = None,
         poll_seconds: float = 1.0,
+        dag_trigger: DagTrigger | None = None,
     ) -> None:
         if not households:
             raise ValueError("GeneratorLoop needs the household population")
@@ -47,6 +49,7 @@ class GeneratorLoop:
         self._seed = seed
         self._sleep = sleep or _real_sleep
         self._poll = poll_seconds
+        self._dag_trigger = dag_trigger or NullDagTrigger()
         self._last_seen_date: dt.date | None = None
 
     def run(self, *, max_days: int | None = None) -> int:
@@ -90,6 +93,10 @@ class GeneratorLoop:
 
         self._lz.write_success_marker(business_date)
         _log.info("feed.success_marker", business_date=business_date.isoformat())
+
+        # The day is fully closed now -> tell the batch layer's orchestrator.
+        # Best-effort: see AirflowDagTrigger's docstring.
+        self._dag_trigger.trigger(business_date)
 
 
 def _dates_between(start_exclusive: dt.date, end_exclusive: dt.date) -> list[dt.date]:

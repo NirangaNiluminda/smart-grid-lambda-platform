@@ -5,12 +5,28 @@ from __future__ import annotations
 from energy_common import SimClock, get_logger
 from energy_common.seeds import load_households, synthetic_households
 
+from batch_file_generator.adapters.airflow_trigger import (
+    AirflowDagTrigger,
+    DagTrigger,
+    NullDagTrigger,
+)
 from batch_file_generator.adapters.landing_zone import CsvLandingZoneWriter
 from batch_file_generator.application.generator_loop import GeneratorLoop
 from batch_file_generator.config import Settings
 from batch_file_generator.domain.reference_data import HouseholdRef
 
 _log = get_logger("batch-file-generator")
+
+
+def _build_dag_trigger(settings: Settings) -> DagTrigger:
+    if not settings.airflow_trigger_enabled:
+        return NullDagTrigger()
+    return AirflowDagTrigger(
+        base_url=settings.airflow_base_url,
+        dag_id=settings.airflow_dag_id,
+        username=settings.airflow_username,
+        password=settings.airflow_password,
+    )
 
 
 def _load_households(settings: Settings) -> list[HouseholdRef]:
@@ -36,4 +52,5 @@ def build_loop(settings: Settings) -> GeneratorLoop:
         landing_zone=CsvLandingZoneWriter(settings.landing_root),
         households=_load_households(settings),
         seed=settings.sim_seed,
+        dag_trigger=_build_dag_trigger(settings),
     )

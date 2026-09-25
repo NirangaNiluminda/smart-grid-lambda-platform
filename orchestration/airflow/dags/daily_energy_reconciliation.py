@@ -71,6 +71,7 @@ def execute_batch_job(
 ) -> tuple[int, int]:
     from batch_processor.adapters.reports import ReportRenderer
     from batch_processor.adapters.repository import PostgresBatchRepository
+    from batch_processor.adapters.spark_session import build_spark_session
     from batch_processor.application.reconcile import BatchReconciliationService
     from batch_processor.config import Settings
     from energy_common.storage import pg_engine
@@ -84,8 +85,12 @@ def execute_batch_job(
     engine = pg_engine(pg_dsn)
     repo = PostgresBatchRepository(engine)
     renderer = ReportRenderer(reports_dir)
-    service = BatchReconciliationService(settings, repo, renderer)
-    return service.run_reconciliation(business_date, allow_open=False)
+    spark = build_spark_session(settings)
+    try:
+        service = BatchReconciliationService(settings, repo, renderer, spark)
+        return service.run_reconciliation(business_date, allow_open=False)
+    finally:
+        spark.stop()
 
 
 def check_dq_gate(pg_dsn: str, business_date: dt.date) -> None:
@@ -205,15 +210,29 @@ if _AIRFLOW:  # pragma: no cover
 
     @dag(
         dag_id=DAG_ID,
-        schedule="@daily",
+        # Externally triggered, not polled: batch-file-generator calls Airflow's
+        # REST API the moment a simulated business day closes and writes its
+        # _SUCCESS marker (see AirflowDagTrigger in batch-file-generator). A
+        # wall-clock schedule like "@daily" would never line up with a demo
+        # session compressed into minutes; `logical_date` on the trigger call is
+        # set to the exact business_date that just closed. A manual
+        # `airflow dags trigger daily_energy_reconciliation -e <date>` remains a
+        # fallback (docs/RUNBOOK.md).
+        schedule=None,
         start_date=dt.datetime(2026, 1, 1),
         catchup=False,
         on_failure_callback=on_failure_alert,
+        default_args={
+            "retries": 3,
+            "retry_delay": dt.timedelta(seconds=20),
+        },
         tags=["batch-layer", "lambda", "part2"],
     )
     def daily_energy_reconciliation_pipeline() -> None:
         @task
         def validate_feed(ds: str) -> dict[str, int]:
+            # Retried (default_args) so a batch-file-generator / ingestion
+            # timing gap of a few seconds self-heals instead of failing the run.
             bdate = dt.date.fromisoformat(ds)
             return validate_feed_files(landing_root, bdate)
 

@@ -66,6 +66,27 @@ def test_catches_up_multiple_closed_days() -> None:
     assert lz.markers == [dt.date(2026, 1, 1), dt.date(2026, 1, 2), dt.date(2026, 1, 3)]
 
 
+def test_dag_trigger_called_after_success_marker() -> None:
+    lz = InMemoryLandingZone()
+    triggered: list = []
+
+    class FakeTrigger:
+        def trigger(self, business_date):  # type: ignore[no-untyped-def]
+            triggered.append(business_date)
+
+    clock = StepClock(dt.datetime(2026, 1, 1, 23, 0, tzinfo=dt.UTC), dt.timedelta(hours=2))
+    loop = GeneratorLoop(
+        clock=clock,
+        landing_zone=lz,
+        households=HH,
+        seed=1,
+        sleep=lambda _s: None,
+        dag_trigger=FakeTrigger(),
+    )
+    loop.run(max_days=1)
+    assert triggered == [dt.date(2026, 1, 1)]
+
+
 def test_generate_for_is_idempotent_in_content() -> None:
     lz1, lz2 = InMemoryLandingZone(), InMemoryLandingZone()
     GeneratorLoop(
