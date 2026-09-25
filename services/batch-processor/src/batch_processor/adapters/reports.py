@@ -131,41 +131,45 @@ class ReportRenderer:
         # 1. Write CSV
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                "business_date",
-                "household_id",
-                "grid_zone",
-                "total_consumption_kwh",
-                "total_solar_kwh",
-                "self_consumed_kwh",
-                "grid_import_kwh",
-                "solar_export_kwh",
-                "tariff_rate",
-                "billing_tier",
-                "subsidy_flag",
-                "energy_charge",
-                "solar_credit",
-                "net_amount",
-                "currency",
-            ])
+            writer.writerow(
+                [
+                    "business_date",
+                    "household_id",
+                    "grid_zone",
+                    "total_consumption_kwh",
+                    "total_solar_kwh",
+                    "self_consumed_kwh",
+                    "grid_import_kwh",
+                    "solar_export_kwh",
+                    "tariff_rate",
+                    "billing_tier",
+                    "subsidy_flag",
+                    "energy_charge",
+                    "solar_credit",
+                    "net_amount",
+                    "currency",
+                ]
+            )
             for b in bills:
-                writer.writerow([
-                    b.business_date.isoformat(),
-                    b.household_id,
-                    b.grid_zone,
-                    b.total_consumption_kwh,
-                    b.total_solar_kwh,
-                    b.self_consumed_kwh,
-                    b.grid_import_kwh,
-                    b.solar_export_kwh,
-                    str(b.tariff_rate),
-                    b.billing_tier.value,
-                    b.subsidy_flag,
-                    str(b.energy_charge),
-                    str(b.solar_credit),
-                    str(b.net_amount),
-                    b.currency,
-                ])
+                writer.writerow(
+                    [
+                        b.business_date.isoformat(),
+                        b.household_id,
+                        b.grid_zone,
+                        b.total_consumption_kwh,
+                        b.total_solar_kwh,
+                        b.self_consumed_kwh,
+                        b.grid_import_kwh,
+                        b.solar_export_kwh,
+                        str(b.tariff_rate),
+                        b.billing_tier.value,
+                        b.subsidy_flag,
+                        str(b.energy_charge),
+                        str(b.solar_credit),
+                        str(b.net_amount),
+                        b.currency,
+                    ]
+                )
 
         # 2. Write HTML
         template = Template(HTML_TEMPLATE)

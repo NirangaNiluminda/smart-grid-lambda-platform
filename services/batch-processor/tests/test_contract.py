@@ -180,18 +180,23 @@ def test_missing_partition_success_marker_aborts_unless_allow_open(tmp_path: Pat
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    schema = pa.schema([
-        ("household_id", pa.string()),
-        ("grid_zone", pa.string()),
-        ("power_consumption_kwh", pa.float64()),
-        ("solar_generation_kwh", pa.float64()),
-    ])
-    table = pa.Table.from_arrays([
-        pa.array(["HH-001"]),
-        pa.array(["zone-north"]),
-        pa.array([5.0]),
-        pa.array([1.0]),
-    ], schema=schema)
+    schema = pa.schema(
+        [
+            ("household_id", pa.string()),
+            ("grid_zone", pa.string()),
+            ("power_consumption_kwh", pa.float64()),
+            ("solar_generation_kwh", pa.float64()),
+        ]
+    )
+    table = pa.Table.from_arrays(
+        [
+            pa.array(["HH-001"]),
+            pa.array(["zone-north"]),
+            pa.array([5.0]),
+            pa.array([1.0]),
+        ],
+        schema=schema,
+    )
     pq.write_table(table, part_dir / "part-0.parquet")
 
     landing_dir.mkdir(parents=True)
@@ -206,10 +211,13 @@ def test_missing_partition_success_marker_aborts_unless_allow_open(tmp_path: Pat
     class FakeBatchRepo:
         def get_active_household_ids(self) -> set[str]:
             return {"HH-001"}
+
         def get_household_zones(self) -> dict[str, str]:
             return {"HH-001": "zone-north"}
+
         def upsert_household_bills(self, bills: list[HouseholdBill]) -> int:
             return len(bills)
+
         def upsert_zone_solar_summaries(self, summaries: list[ZoneSolarSummary]) -> int:
             return len(summaries)
 

@@ -121,9 +121,7 @@ class SubsidisedBillingStrategy:
         kwh_standard = max(grid_import - self.first_block_kwh, 0.0)
 
         charge_sub = (
-            Decimal(str(round(kwh_subsidised, 4)))
-            * base_rate
-            * Decimal(str(self.discount_factor))
+            Decimal(str(round(kwh_subsidised, 4))) * base_rate * Decimal(str(self.discount_factor))
         )
         charge_std = Decimal(str(round(kwh_standard, 4))) * base_rate
 
