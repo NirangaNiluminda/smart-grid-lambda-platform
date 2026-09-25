@@ -58,7 +58,28 @@ curl -s http://localhost:8000/api/realtime/zones | jq .
 curl -s http://localhost:8000/api/realtime/zones/zone-north | jq .
 ```
 
-### 3.2 Running the Batch Reconciliation Manually
+### 3.2 How the Airflow DAG actually gets triggered
+
+`daily_energy_reconciliation` is **not** on a wall-clock schedule (`schedule=None`)
+— a schedule like `@daily` would never fire inside a demo session where a
+simulated business day closes every `SIM_DAY_SECONDS` (minutes, not a real day).
+Instead, the moment `batch-file-generator` finishes writing a day's feed (right
+after the `_SUCCESS` marker), it calls Airflow's REST API to trigger a run for
+that exact `business_date` (`AIRFLOW_TRIGGER_ENABLED=true`, set automatically by
+`infra/docker-compose.part2.yml`). Watch it happen:
+
+```bash
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.part2.yml logs -f batch-file-generator airflow
+```
+
+**Manual fallback** (trigger disabled, or re-running a past day):
+
+```bash
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.part2.yml exec airflow \
+  airflow dags trigger daily_energy_reconciliation -e 2026-01-01
+```
+
+### 3.3 Running the Batch Reconciliation Manually
 If you need to reconcile or re-bill a specific business date directly without Airflow:
 ```bash
 # Authoritative run (requires closed partition _SUCCESS marker):
@@ -71,7 +92,7 @@ Generated reports are deposited in `reports/out/`:
 - `reports/out/billing_report_YYYY-MM-DD.csv`
 - `reports/out/billing_report_YYYY-MM-DD.html`
 
-### 3.3 Querying Billing & Solar Reports via API
+### 3.4 Querying Billing & Solar Reports via API
 ```bash
 # Daily billing reconciliation for a specific date
 curl -s http://localhost:8000/api/billing/daily/2026-01-01 | jq .
@@ -83,7 +104,7 @@ curl -s "http://localhost:8000/api/billing/household/HH-00042?date=2026-01-01" |
 curl -s http://localhost:8000/api/reports/solar/2026-01-01 | jq .
 ```
 
-### 3.4 Monitoring Active & Resolved Alerts
+### 3.5 Monitoring Active & Resolved Alerts
 Connect to Postgres to query the `alerts` table:
 ```bash
 docker compose -f infra/docker-compose.yml exec postgres \
@@ -97,9 +118,16 @@ docker compose -f infra/docker-compose.yml exec postgres \
 
 ### 4.1 Running All Automated Tests
 ```bash
-make test
+make test               # unit tests: no infrastructure needed (Spark runs in local[*] mode)
+make up && make test-integration   # cross-service tests against real Postgres (tests/integration/)
 ```
-Runs the complete test suite including all 25 contract specs for Speed Layer, Batch Layer, Serving Layer, Alert Engine, and Airflow DAG helpers.
+`make test` runs the full unit suite: Speed Layer and Batch Layer transforms
+(against a local Spark session — see `docs/DEV_SETUP.md` if this fails with a
+`PermissionError` from `spark-submit`), Serving Layer, Alert Engine, Airflow DAG
+helpers. `make test-integration` proves the services agree with each other
+against a real database — the upsert accumulation behaviour, the alert
+context repository's SQL, the batch→serving read path, and the `serving_ro`
+role's grants.
 
 ### 4.2 Code Quality & Formatting
 ```bash

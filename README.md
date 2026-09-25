@@ -160,10 +160,11 @@ See [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md) and [`docs/PART2_ONBOARDING.md`](do
 | Ingestion | batch-file-generator | Dev A | ✅ Part 1 |
 | Ingestion | ingestion → data lake | Dev A | ✅ Part 1 |
 | Foundation | `libs/common` | Dev A | ✅ Part 1 |
-| Processing | stream-processor (speed) | Dev B | 🔲 Part 2 |
-| Processing | batch-processor (batch) | Dev B | 🔲 Part 2 |
-| Orchestration | Airflow DAG | Dev B | 🔲 Part 2 |
-| Serving | serving-api | Dev B | 🔲 Part 2 |
-| Observability | alert-engine + dashboards | Dev B | 🔲 Part 2 |
+| Processing | stream-processor (speed) | Dev B | ✅ Part 2 |
+| Processing | batch-processor (batch) | Dev B | ✅ Part 2 |
+| Orchestration | Airflow DAG | Dev B | ✅ Part 2 |
+| Serving | serving-api | Dev B | ✅ Part 2 |
+| Observability | alert-engine + dashboards | Dev B | ✅ Part 2 |
 
-Task-level tracking: [`TASKS.md`](TASKS.md).
+Task-level tracking, including the post-merge hardening pass: [`TASKS.md`](TASKS.md).
+Remaining before submission: report sections, `docs/OBSERVABILITY.md §5` screenshots, contribution statement.

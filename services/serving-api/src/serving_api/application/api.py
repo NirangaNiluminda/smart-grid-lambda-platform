@@ -7,6 +7,7 @@ import datetime as dt
 from energy_common.domain.models import HouseholdBill, ZoneMetric, ZoneSolarSummary
 from fastapi import APIRouter, FastAPI, HTTPException, Query, status
 from pydantic import BaseModel
+
 from serving_api.adapters.repository import ServingRepositoryProtocol
 from serving_api.config import Settings
 

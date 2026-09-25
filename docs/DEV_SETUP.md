@@ -89,3 +89,4 @@ python -m meter_simulator
 | `mypy` fails on a fresh clone | `make install` first (needs the editable installs for imports to resolve) |
 | Tests fail with `filterwarnings=error` | a dependency emitted a warning — fix the call or add a scoped `filterwarnings` marker, don't broaden globally |
 | Parquet partition never gets `_SUCCESS` | the simulated day hasn't closed yet, or `SIM_DAY_SECONDS` is very large |
+| stream-processor / batch-processor tests fail with `PermissionError: ... pyspark/bin/spark-submit` | your `.venv` is on a filesystem mounted `noexec` (common for exFAT/NTFS/some network drives — `mount \| grep $(pwd)`); pyspark's launcher can't execute from there. Create the venv on a normal filesystem (e.g. `python3 -m venv /tmp/venv`, `pip install -e "libs/common[...]" -e services/stream-processor -e services/batch-processor`) and run `pytest` from that interpreter instead. Not an issue in Docker or CI. |
