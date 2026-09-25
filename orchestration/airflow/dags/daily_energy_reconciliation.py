@@ -1,41 +1,23 @@
-"""DAG: daily_energy_reconciliation  —  Part 2 skeleton (Dev B, §B3).
+"""DAG: daily_energy_reconciliation  —  Part 2 (Dev B, §B3).
 
-Drives the Lambda **batch layer** once per closed simulated business day.
-
-Task graph (implement the bodies):
-
-    wait_for_feed          FileSensor on  {LANDING_ROOT}/_SUCCESS_{{ ds }}
-        │
-    validate_feed          tariff + weather schema & row-count checks
-        │
-    wait_for_lake          partition {LAKE_ROOT}/readings_raw/business_date={{ ds }}/_SUCCESS
-        │
-    run_batch              batch-processor --business-date {{ ds }}
-        │
-    dq_gate                every active household billed once; solar reconciles
-        │
-    publish_report         copy reports/out/billing_report_{{ ds }}.html to the served location
-        │
-    record_run             upsert batch_runs (status=success, rows_written=...)
-
-on_failure_callback -> insert a 'critical' row into `alerts`.
-
-Backfill:  airflow dags backfill -s 2026-01-01 -e 2026-01-05 daily_energy_reconciliation
+Drives the Lambda batch layer once per closed simulated business day.
 """
 
 from __future__ import annotations
 
-# NOTE: kept import-safe without Airflow installed so `pytest` collection and
-# `ruff` work in the Part 1 environment. Dev B replaces this guard with the real
-# DAG definition.
+import csv
+import datetime as dt
+import os
+import shutil
+import uuid
+from pathlib import Path
+
 try:
     from airflow.decorators import dag, task  # type: ignore[import-not-found]
 
     _AIRFLOW = True
 except ModuleNotFoundError:  # pragma: no cover
     _AIRFLOW = False
-
-# Dev B: import FileSensor (airflow.sensors.filesystem) for `wait_for_feed`.
 
 
 DAG_ID = "daily_energy_reconciliation"
@@ -50,21 +32,233 @@ TASK_ORDER = [
 ]
 
 
-if _AIRFLOW:  # pragma: no cover - exercised only in the Part 2 Airflow container
+def validate_feed_files(landing_root: Path, business_date: dt.date) -> dict[str, int]:
+    date_str = business_date.isoformat()
+    tariff_file = landing_root / f"tariff_reference_{date_str}.csv"
+    weather_file = landing_root / f"weather_forecast_{date_str}.csv"
+
+    if not tariff_file.exists() or not weather_file.exists():
+        raise FileNotFoundError(f"Missing reference files for date {date_str}")
+
+    with open(tariff_file, encoding="utf-8") as f:
+        tariff_rows = sum(1 for _ in csv.reader(f)) - 1
+
+    with open(weather_file, encoding="utf-8") as f:
+        weather_rows = sum(1 for _ in csv.reader(f)) - 1
+
+    if tariff_rows <= 0 or weather_rows <= 0:
+        raise ValueError(
+            f"Feed validation failed: tariff_rows={tariff_rows}, weather_rows={weather_rows}"
+        )
+
+    return {"tariff_rows": tariff_rows, "weather_rows": weather_rows}
+
+
+def verify_lake_partition(lake_root: Path, business_date: dt.date) -> bool:
+    date_str = business_date.isoformat()
+    marker = lake_root / "readings_raw" / f"business_date={date_str}" / "_SUCCESS"
+    if not marker.exists():
+        raise FileNotFoundError(f"Lake partition _SUCCESS marker missing: {marker}")
+    return True
+
+
+def execute_batch_job(
+    business_date: dt.date,
+    lake_root: Path,
+    landing_root: Path,
+    pg_dsn: str,
+    reports_dir: Path,
+) -> tuple[int, int]:
+    from batch_processor.adapters.reports import ReportRenderer
+    from batch_processor.adapters.repository import PostgresBatchRepository
+    from batch_processor.application.reconcile import BatchReconciliationService
+    from batch_processor.config import Settings
+    from energy_common.storage import pg_engine
+
+    settings = Settings(
+        pg_dsn=pg_dsn,
+        lake_root=lake_root,
+        landing_root=landing_root,
+        report_out_dir=reports_dir,
+    )
+    engine = pg_engine(pg_dsn)
+    repo = PostgresBatchRepository(engine)
+    renderer = ReportRenderer(reports_dir)
+    service = BatchReconciliationService(settings, repo, renderer)
+    return service.run_reconciliation(business_date, allow_open=False)
+
+
+def check_dq_gate(pg_dsn: str, business_date: dt.date) -> None:
+    from energy_common.storage import pg_engine
+    from sqlalchemy import text
+
+    engine = pg_engine(pg_dsn)
+    with engine.connect() as conn:
+        b_count = conn.execute(
+            text("SELECT count(*) FROM daily_household_billing WHERE business_date = :bdate"),
+            {"bdate": business_date},
+        ).scalar()
+        s_count = conn.execute(
+            text("SELECT count(*) FROM daily_zone_solar_summary WHERE business_date = :bdate"),
+            {"bdate": business_date},
+        ).scalar()
+
+    if not b_count or b_count <= 0:
+        raise RuntimeError(f"DQ gate failed: no household bills found for {business_date}")
+    if not s_count or s_count <= 0:
+        raise RuntimeError(f"DQ gate failed: no zone solar summaries found for {business_date}")
+
+
+def publish_report_artifact(
+    business_date: dt.date,
+    reports_out_dir: Path,
+    published_dir: Path,
+) -> Path:
+    published_dir.mkdir(parents=True, exist_ok=True)
+    src_html = reports_out_dir / f"billing_report_{business_date}.html"
+    dest_html = published_dir / f"billing_report_{business_date}.html"
+    if src_html.exists():
+        shutil.copyfile(src_html, dest_html)
+    return dest_html
+
+
+def record_batch_run(
+    pg_dsn: str,
+    run_id: str,
+    dag_id: str,
+    business_date: dt.date,
+    status: str,
+    rows_written: int,
+    notes: str | None = None,
+) -> None:
+    from energy_common.storage import pg_engine
+    from sqlalchemy import text
+
+    engine = pg_engine(pg_dsn)
+    stmt = text(
+        """
+        INSERT INTO batch_runs (
+            run_id, dag_id, business_date, status, rows_written, started_at, finished_at, notes
+        ) VALUES (
+            :run_id, :dag_id, :bdate, :status, :rows, now(), now(), :notes
+        )
+        ON CONFLICT (run_id) DO UPDATE SET
+            status = EXCLUDED.status,
+            rows_written = EXCLUDED.rows_written,
+            finished_at = EXCLUDED.finished_at,
+            notes = EXCLUDED.notes;
+        """
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            stmt,
+            {
+                "run_id": run_id,
+                "dag_id": dag_id,
+                "bdate": business_date,
+                "status": status,
+                "rows": rows_written,
+                "notes": notes,
+            },
+        )
+
+
+def on_failure_alert(context: dict) -> None:
+    from energy_common.storage import pg_engine
+    from sqlalchemy import text
+
+    pg_dsn = os.getenv("PG_DSN", "postgresql://energy:energy@postgres:5432/energy_serving")
+    engine = pg_engine(pg_dsn)
+
+    dag_run = context.get("dag_run")
+    bdate = getattr(dag_run, "execution_date", dt.datetime.now(dt.UTC)).date()
+    exception = context.get("exception", "Unknown error")
+
+    stmt = text(
+        """
+        INSERT INTO alerts (
+            alert_id, rule_name, severity, grid_zone, business_date, message, context, fired_at
+        ) VALUES (
+            :aid, 'BatchFailureRule', 'critical', NULL, :bdate, :msg, :ctx::jsonb, now()
+        )
+        ON CONFLICT DO NOTHING;
+        """
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            stmt,
+            {
+                "aid": str(uuid.uuid4()),
+                "bdate": bdate,
+                "msg": f"Airflow DAG daily_energy_reconciliation failed: {exception}",
+                "ctx": '{"source": "airflow"}',
+            },
+        )
+
+
+if _AIRFLOW:  # pragma: no cover
+    landing_root = Path(os.getenv("LANDING_ROOT", "/data/landing"))
+    lake_root = Path(os.getenv("LAKE_ROOT", "/data/lake"))
+    pg_dsn = os.getenv("PG_DSN", "postgresql://energy:energy@postgres:5432/energy_serving")
+    reports_dir = Path("/opt/airflow/reports")
+    published_dir = Path("/opt/airflow/reports/published")
 
     @dag(
         dag_id=DAG_ID,
-        schedule=None,  # Dev B: trigger per simulated-day close, or a wall-clock interval
+        schedule="@daily",
+        start_date=dt.datetime(2026, 1, 1),
         catchup=False,
+        on_failure_callback=on_failure_alert,
         tags=["batch-layer", "lambda", "part2"],
     )
-    def daily_energy_reconciliation() -> None:
+    def daily_energy_reconciliation_pipeline() -> None:
         @task
-        def not_implemented() -> None:
-            raise NotImplementedError(
-                "daily_energy_reconciliation: build the task graph — docs/PART2_ONBOARDING.md §B3"
+        def validate_feed(ds: str) -> dict[str, int]:
+            bdate = dt.date.fromisoformat(ds)
+            return validate_feed_files(landing_root, bdate)
+
+        @task
+        def wait_for_lake(ds: str) -> bool:
+            bdate = dt.date.fromisoformat(ds)
+            return verify_lake_partition(lake_root, bdate)
+
+        @task
+        def run_batch(ds: str) -> int:
+            bdate = dt.date.fromisoformat(ds)
+            bills, _ = execute_batch_job(bdate, lake_root, landing_root, pg_dsn, reports_dir)
+            return bills
+
+        @task
+        def dq_gate(ds: str) -> None:
+            bdate = dt.date.fromisoformat(ds)
+            check_dq_gate(pg_dsn, bdate)
+
+        @task
+        def publish_report(ds: str) -> str:
+            bdate = dt.date.fromisoformat(ds)
+            path = publish_report_artifact(bdate, reports_dir, published_dir)
+            return str(path)
+
+        @task
+        def record_run(ds: str, rows_written: int) -> None:
+            bdate = dt.date.fromisoformat(ds)
+            record_batch_run(
+                pg_dsn=pg_dsn,
+                run_id=f"run-{ds}",
+                dag_id=DAG_ID,
+                business_date=bdate,
+                status="success",
+                rows_written=rows_written,
+                notes="Completed successfully via Airflow DAG",
             )
 
-        not_implemented()
+        v_feed = validate_feed("{{ ds }}")
+        w_lake = wait_for_lake("{{ ds }}")
+        b_job = run_batch("{{ ds }}")
+        dq = dq_gate("{{ ds }}")
+        pub = publish_report("{{ ds }}")
+        rec = record_run("{{ ds }}", b_job)
 
-    daily_energy_reconciliation()
+        v_feed >> w_lake >> b_job >> dq >> pub >> rec
+
+    daily_energy_reconciliation_pipeline()

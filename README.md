@@ -67,7 +67,60 @@ data/                   seed/ (committed) · landing/ + lake/ (runtime, git-igno
 docs/                   Plan, architecture, contracts, onboarding, report outline
 ```
 
-## Quick start (Part 1 — available now)
+## Docker Setup: Base + Overlay Architecture
+
+The platform uses a layered Docker Compose architecture with dedicated `Dockerfile`s per service:
+
+1. **Independent Service `Dockerfile`s (`services/*/Dockerfile`):**
+   - Each microservice has an isolated `Dockerfile` tailored to its runtime dependencies (e.g. lightweight Python for `meter-simulator`, PySpark for `batch-processor`, FastAPI for `serving-api`).
+   - Keeps images lean and prevents cache invalidation across services.
+
+2. **Base Compose (`infra/docker-compose.yml`):**
+   - Spins up foundational infrastructure: Apache Kafka (KRaft), PostgreSQL 16, Prometheus, and the Part 1 producers/ingestor.
+   - Run via `make up`.
+
+3. **Part 2 Overlay Compose (`infra/docker-compose.part2.yml`):**
+   - Layers downstream processing, serving, and orchestration onto the base stack using Docker Compose multi-file merging:
+     ```bash
+     docker compose -f infra/docker-compose.yml -f infra/docker-compose.part2.yml up -d --build
+     ```
+   - Run via `make up-full`.
+
+---
+
+## How Part 2 Works
+
+Part 2 completes the Lambda Architecture by consuming the streams and data lake produced in Part 1:
+
+### 1. Speed Layer (`stream-processor`)
+* **Technology:** Apache Spark Structured Streaming.
+* **Input:** Real-time messages from Kafka topic `meter.readings`.
+* **Processing:** Validates and enriches readings against dimension data (`dim_zone`, `dim_household`), applies watermarking for late-arriving data, and computes tumbling (1-min) and sliding (5-min) window aggregations.
+* **Output:** Writes near-real-time metrics (`total_consumption_kwh`, `total_solar_kwh`, `renewable_pct`, `active_meter_count`) into Postgres `rt_zone_metrics`.
+
+### 2. Batch Layer (`batch-processor`)
+* **Technology:** Apache Spark Batch.
+* **Input:** Immutable Parquet master dataset in `data/lake/readings_raw/business_date=YYYY-MM-DD/` once partition is closed (`_SUCCESS`), plus daily landing CSV feeds (`tariff_reference_*.csv`, `weather_forecast_*.csv`).
+* **Processing:** Recomputes authoritative daily rollups per household, applies configurable tariff strategies (`FlatBilling`, `TieredBilling`, `SubsidisedBilling`), calculates net billing and solar export credits, and runs data quality assertions.
+* **Output:** Idempotently upserts `daily_household_billing` and `daily_zone_solar_summary` into Postgres, and outputs report artifacts (`reports/out/billing_report_*.html` and `.csv`).
+
+### 3. Orchestration (`orchestration/airflow`)
+* **Technology:** Apache Airflow (`daily_energy_reconciliation` DAG).
+* **Role:** Senses the daily simulated feed and lake partition closure, triggers the `batch-processor` job, verifies data quality, and refreshes materialized views.
+
+### 4. Serving Layer (`serving-api`)
+* **Technology:** FastAPI & Uvicorn.
+* **Role:** Exposes high-performance read APIs over Postgres (`/api/realtime/zones`, `/api/billing/household/{id}`, etc.) uniting real-time speed layer data and reconciled batch records for frontends and dashboards.
+
+### 5. Observability & Alerting (`alert-engine`, Prometheus, Grafana)
+* **Technology:** Python daemon, Prometheus, and Grafana.
+* **Role:** Evaluates health check and SLA rules over Postgres and Prometheus metrics (e.g. data gaps > 3 min, renewable generation < 15%, excessive reject rate), logging alerts to the `alerts` table and displaying operational dashboards.
+
+---
+
+## Quick start
+
+### Option A: Part 1 Only (Core Ingestion Stack)
 
 ```bash
 git clone https://github.com/NirangaNiluminda/smart-grid-lambda-platform.git
@@ -77,10 +130,27 @@ make install        # local .venv for tests + tooling
 make test           # unit tests, no infrastructure needed
 make up             # Kafka + Postgres + Prometheus + sources + ingestion
 make topics         # create Kafka topics
+make seed           # populate Postgres dimension tables
 docker compose -f infra/docker-compose.yml logs -f meter-simulator ingestion
 ```
 
-See [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md) for prerequisites and troubleshooting.
+### Option B: Full Stack (Part 1 + Part 2 Layer)
+
+```bash
+make install-part2  # install heavy dependencies (pyspark, fastapi, etc.)
+make up-full        # builds & runs both base + Part 2 overlay containers
+make seed           # ensure dimension tables and DDLs are seeded
+make topics         # ensure Kafka topics exist
+make logs           # tail logs across all running services
+```
+
+To stop containers:
+```bash
+make down           # stop containers, preserve volume state
+make clean          # stop containers and remove volumes + generated data
+```
+
+See [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md) and [`docs/PART2_ONBOARDING.md`](docs/PART2_ONBOARDING.md) for detailed guides and troubleshooting.
 
 ## Status
 

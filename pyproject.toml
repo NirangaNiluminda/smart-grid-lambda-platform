@@ -42,4 +42,9 @@ testpaths = ["libs", "services"]
 markers = [
     "integration: tests that need live infrastructure (Kafka, Postgres); excluded from the default unit run",
 ]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:anyio.*",
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
+]

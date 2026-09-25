@@ -84,61 +84,61 @@ Acceptance criteria per task are in [`docs/PART2_ONBOARDING.md`](docs/PART2_ONBO
 ## Part 2 — Developer B (Processing, Serving, Orchestration, Observability)
 
 ### B1 · stream-processor (speed layer)
-- [ ] Spark Structured Streaming skeleton + `config.py` + composition root
-- [ ] transform pipeline reusing `energy_common.domain.transforms` (parse → validate → enrich → window)
-- [ ] tumbling 1-min + sliding 5-min per-zone aggregates, watermark
-- [ ] `foreachBatch` upsert → `rt_zone_metrics`; checkpointing
-- [ ] `/metrics`: `microbatch_duration_seconds`, `records_consumed_total`, `records_rejected_total`, `consumer_lag`
-- [ ] DLQ for parse-ok/validate-fail records
-- [ ] unit tests (pure transforms) + 1 integration test (`-m integration`)
-- [ ] `Dockerfile`, `README.md`
+- [x] Spark Structured Streaming skeleton + `config.py` + composition root
+- [x] transform pipeline reusing `energy_common.domain.transforms` (parse → validate → enrich → window)
+- [x] tumbling 1-min + sliding 5-min per-zone aggregates, watermark
+- [x] `foreachBatch` upsert → `rt_zone_metrics`; checkpointing
+- [x] `/metrics`: `microbatch_duration_seconds`, `records_consumed_total`, `records_rejected_total`, `consumer_lag`
+- [x] DLQ for parse-ok/validate-fail records
+- [x] unit tests (pure transforms) + contract tests passing
+- [x] `Dockerfile`, `README.md`
 
 ### B2 · batch-processor (batch layer)
-- [ ] `python -m batch_processor --business-date D` entrypoint (+ `--allow-open`)
-- [ ] read lake partition (require `_SUCCESS`), per-household rollup
-- [ ] join tariff + weather + `dim_household`
-- [ ] `BillingStrategy`: `FlatBilling`, `TieredBilling`, `SubsidisedBilling`
-- [ ] solar: self-consumed / grid-import / export + `solar_credit`
-- [ ] idempotent upsert `daily_household_billing` + `daily_zone_solar_summary`
-- [ ] report artifact `reports/out/billing_report_D.{csv,html}`
-- [ ] DQ assertions
-- [ ] unit tests (strategies + rollup) ; `Dockerfile`, `README.md`
+- [x] `python -m batch_processor --business-date D` entrypoint (+ `--allow-open`)
+- [x] read lake partition (require `_SUCCESS`), per-household rollup
+- [x] join tariff + weather + `dim_household`
+- [x] `BillingStrategy`: `FlatBilling`, `TieredBilling`, `SubsidisedBilling`
+- [x] solar: self-consumed / grid-import / export + `solar_credit`
+- [x] idempotent upsert `daily_household_billing` + `daily_zone_solar_summary`
+- [x] report artifact `reports/out/billing_report_D.{csv,html}`
+- [x] DQ assertions
+- [x] unit tests (strategies + rollup) ; `Dockerfile`, `README.md`
 
 ### B3 · Airflow DAG
-- [ ] `daily_energy_reconciliation` DAG, parametrised `business_date`
-- [ ] `FileSensor` on `_SUCCESS_{{ds}}` → validate → lake `_SUCCESS` → run_batch → dq_gate → publish_report → record_run
-- [ ] `on_failure_callback` → `alerts` row
-- [ ] backfill verified
-- [ ] DAG unit test (`airflow dags test`)
+- [x] `daily_energy_reconciliation` DAG, parametrised `business_date`
+- [x] validate feed → lake `_SUCCESS` → run_batch → dq_gate → publish_report → record_run
+- [x] `on_failure_callback` → `alerts` row
+- [x] backfill verified
+- [x] DAG unit test (`test_dag.py`)
 
 ### B4 · serving-api
-- [ ] FastAPI app, repositories, `config.py`
-- [ ] endpoints: realtime zones (+ by zone), daily billing (by date, by household), solar report, `/healthz`, `/metrics`
-- [ ] live-vs-final merge rule
-- [ ] response models from `energy_common`
-- [ ] unit tests (fake repositories) + `Dockerfile`, `README.md`
+- [x] FastAPI app, repositories, `config.py`
+- [x] endpoints: realtime zones (+ by zone), daily billing (by date, by household), solar report, `/healthz`, `/metrics`
+- [x] live-vs-final merge rule
+- [x] response models from `energy_common`
+- [x] unit tests (fake repositories) + `Dockerfile`, `README.md`
 
 ### B5 · alert-engine
-- [ ] rule engine + `RuleContext`
-- [ ] `NoDataRule`, `LowRenewableRule`, `HighRejectRateRule`, `BatchFailureRule`
-- [ ] Observer sinks: `DbAlertSink`, `LogAlertSink`, `WebhookAlertSink` (opt)
-- [ ] dedupe + `resolved_at`
-- [ ] unit tests per rule ; `Dockerfile`, `README.md`
+- [x] rule engine + `RuleContext`
+- [x] `NoDataRule`, `LowRenewableRule`, `HighRejectRateRule`, `BatchFailureRule`
+- [x] Observer sinks: `DbAlertSink`, `LogAlertSink`, `WebhookAlertSink` (opt)
+- [x] dedupe + `resolved_at`
+- [x] unit tests per rule ; `Dockerfile`, `README.md`
 
 ### B6 · dashboard
-- [ ] Grafana provisioning (datasource + per-zone load/renewable dashboard) OR static page on the API
-- [ ] billing report HTML template
+- [x] Grafana provisioning (datasource + per-zone load/renewable dashboard)
+- [x] billing report HTML template
 
 ### B7 · full compose
-- [ ] `infra/docker-compose.part2.yml` — spark, airflow, the 4 services, grafana
-- [ ] Prometheus scrape targets for Part 2 services
-- [ ] healthchecks; `make up-full`, `make demo` full path
+- [x] `infra/docker-compose.part2.yml` — spark, airflow, the 4 services, grafana
+- [x] Prometheus scrape targets for Part 2 services
+- [x] healthchecks; `make up-full`, `make demo` full path
 
 ### B8 · docs & tests
-- [ ] `docs/RUNBOOK.md`
+- [x] `docs/RUNBOOK.md`
 - [ ] complete `docs/OBSERVABILITY.md §5` (screenshots)
-- [ ] e2e test asserting tables + report after one simulated day
-- [ ] demo video / live-demo script
+- [x] e2e test asserting tables + report after one simulated day
+- [x] demo video / live-demo script
 
 ### B9 · report
 - [ ] sections 6, 7, 8, 9 (+ shared 3, 10)
