@@ -164,7 +164,7 @@ def test_rerun_for_same_date_is_idempotent() -> None:
     assert stored_bills[(b_date, "HH-001")].net_amount == Decimal("400.00")
 
 
-def test_missing_partition_success_marker_aborts_unless_allow_open(tmp_path: Path) -> None:
+def test_missing_partition_success_marker_aborts_unless_allow_open(tmp_path: Path, spark) -> None:
     """Missing partition _SUCCESS marker aborts unless --allow-open."""
     b_date = dt.date(2026, 1, 1)
     date_str = b_date.isoformat()
@@ -230,6 +230,7 @@ def test_missing_partition_success_marker_aborts_unless_allow_open(tmp_path: Pat
         settings=settings,
         repository=FakeBatchRepo(),  # type: ignore[arg-type]
         report_renderer=ReportRenderer(out_dir),
+        spark=spark,
     )
 
     # Missing _SUCCESS -> raises FileNotFoundError

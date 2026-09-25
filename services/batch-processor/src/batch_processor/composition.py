@@ -7,6 +7,7 @@ from energy_common.storage import pg_engine
 
 from batch_processor.adapters.reports import ReportRenderer
 from batch_processor.adapters.repository import PostgresBatchRepository
+from batch_processor.adapters.spark_session import build_spark_session
 from batch_processor.application.reconcile import BatchReconciliationService
 from batch_processor.config import Settings
 
@@ -16,8 +17,10 @@ def build_reconciliation_service(settings: Settings) -> BatchReconciliationServi
     engine = pg_engine(settings.pg_dsn)
     repo = PostgresBatchRepository(engine)
     renderer = ReportRenderer(settings.report_out_dir)
+    spark = build_spark_session(settings)
     return BatchReconciliationService(
         settings=settings,
         repository=repo,
         report_renderer=renderer,
+        spark=spark,
     )

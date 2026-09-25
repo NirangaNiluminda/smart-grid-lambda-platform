@@ -7,17 +7,6 @@ import datetime as dt
 import time
 from decimal import Decimal
 
-import pyarrow.parquet as pq
-from batch_processor.adapters.reports import ReportRenderer
-from batch_processor.adapters.repository import PostgresBatchRepository
-from batch_processor.config import Settings
-from batch_processor.domain.billing import get_billing_strategy
-from batch_processor.domain.quality import (
-    assert_all_households_billed,
-    assert_charges_valid,
-    assert_solar_reconciles,
-    assert_weather_sanity,
-)
 from energy_common import get_logger
 from energy_common.domain.models import (
     BillingTier,
@@ -28,6 +17,19 @@ from energy_common.domain.models import (
 )
 from energy_common.domain.transforms import energy_balance, renewable_pct
 from energy_common.observability import gauge, histogram
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+from batch_processor.adapters.reports import ReportRenderer
+from batch_processor.adapters.repository import PostgresBatchRepository
+from batch_processor.config import Settings
+from batch_processor.domain.billing import get_billing_strategy
+from batch_processor.domain.quality import (
+    assert_all_households_billed,
+    assert_charges_valid,
+    assert_solar_reconciles,
+    assert_weather_sanity,
+)
 
 logger = get_logger("batch-processor")
 
@@ -51,10 +53,12 @@ class BatchReconciliationService:
         settings: Settings,
         repository: PostgresBatchRepository,
         report_renderer: ReportRenderer,
+        spark: SparkSession,
     ) -> None:
         self.settings = settings
         self.repo = repository
         self.report_renderer = report_renderer
+        self.spark = spark
 
     def run_reconciliation(
         self,
@@ -78,24 +82,34 @@ class BatchReconciliationService:
                 "Use --allow-open to process anyway."
             )
 
-        # 2. Read Lake Parquet records and aggregate per household
+        # 2. Read the Lake Parquet partition with Spark and aggregate per household.
+        # Negative readings (anomalies the speed layer would DLQ) are zeroed rather
+        # than dropped, so a household with an anomalous reading is still billed
+        # for its other genuine consumption that day.
+        lake_df = self.spark.read.parquet(str(partition_dir))
+        pos_cons = F.when(
+            F.col("power_consumption_kwh") > 0, F.col("power_consumption_kwh")
+        ).otherwise(0.0)
+        pos_solar = F.when(
+            F.col("solar_generation_kwh") > 0, F.col("solar_generation_kwh")
+        ).otherwise(0.0)
+        household_agg = (
+            lake_df.groupBy("household_id")
+            .agg(
+                F.sum(pos_cons).alias("total_consumption_kwh"),
+                F.sum(pos_solar).alias("total_solar_kwh"),
+                F.first("grid_zone").alias("grid_zone"),
+            )
+            .collect()
+        )
         consumption_by_hh: dict[str, float] = {}
         solar_by_hh: dict[str, float] = {}
         hh_to_zone_lake: dict[str, str] = {}
-
-        parquet_files = list(partition_dir.glob("*.parquet"))
-        for pfile in parquet_files:
-            table = pq.read_table(pfile)
-            pydict = table.to_pydict()
-            hh_col = pydict.get("household_id", [])
-            zone_col = pydict.get("grid_zone", [])
-            cons_col = pydict.get("power_consumption_kwh", [])
-            sol_col = pydict.get("solar_generation_kwh", [])
-
-            for hh, z, c, s in zip(hh_col, zone_col, cons_col, sol_col, strict=False):
-                consumption_by_hh[hh] = consumption_by_hh.get(hh, 0.0) + (c if c > 0 else 0.0)
-                solar_by_hh[hh] = solar_by_hh.get(hh, 0.0) + (s if s > 0 else 0.0)
-                hh_to_zone_lake[hh] = z
+        for agg_row in household_agg:
+            hh_id = agg_row["household_id"]
+            consumption_by_hh[hh_id] = float(agg_row["total_consumption_kwh"] or 0.0)
+            solar_by_hh[hh_id] = float(agg_row["total_solar_kwh"] or 0.0)
+            hh_to_zone_lake[hh_id] = agg_row["grid_zone"]
 
         # 3. Read landing zone reference data
         tariff_file = self.settings.landing_root / f"tariff_reference_{date_str}.csv"

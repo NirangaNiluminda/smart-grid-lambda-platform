@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from energy_common.config import BaseServiceSettings
+from pydantic import Field
 
 
 class Settings(BaseServiceSettings):
@@ -15,6 +16,9 @@ class Settings(BaseServiceSettings):
     lake_root: Path = Path("/data/lake")
     landing_root: Path = Path("/data/landing")
     report_out_dir: Path = Path("reports/out")
+
+    spark_master: str = "local[*]"
+    spark_shuffle_partitions: int = Field(default=4, gt=0)
 
     # Feed-in credit paid per kWh of solar exported to the grid.
     solar_export_rate: float = 18.0

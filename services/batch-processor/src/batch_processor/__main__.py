@@ -32,9 +32,9 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
 
 def main(args: list[str] | None = None) -> int:
     parsed = parse_args(args)
+    settings = load_settings()
+    service = build_reconciliation_service(settings)
     try:
-        settings = load_settings()
-        service = build_reconciliation_service(settings)
         bills_count, summaries_count = service.run_reconciliation(
             business_date=parsed.business_date,
             allow_open=parsed.allow_open,
@@ -49,6 +49,8 @@ def main(args: list[str] | None = None) -> int:
     except Exception as exc:
         logger.exception("batch.failed", error=str(exc))
         return 1
+    finally:
+        service.spark.stop()
 
 
 if __name__ == "__main__":
