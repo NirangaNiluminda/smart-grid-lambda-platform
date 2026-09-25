@@ -5,11 +5,12 @@ from __future__ import annotations
 import datetime as dt
 from typing import Protocol
 
-from alert_engine.domain.rules import Rule, RuleContext
 from energy_common import get_logger
 from energy_common.domain.models import Alert
 from energy_common.domain.ports import AlertSink
 from energy_common.observability import counter
+
+from alert_engine.domain.rules import Rule, RuleContext
 
 logger = get_logger("alert-engine")
 

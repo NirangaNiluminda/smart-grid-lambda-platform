@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import sys
 import time
 
-from energy_common import get_logger
-from energy_common.simclock import business_date_for
+from energy_common import SimClock, get_logger
 
-from alert_engine.composition import build_engine
+from alert_engine.composition import build_context_builder, build_engine
 from alert_engine.config import load_settings
-from alert_engine.domain.rules import RuleContext
 
 logger = get_logger("alert-engine")
 
@@ -20,16 +17,21 @@ def main() -> int:
     try:
         settings = load_settings()
         engine = build_engine(settings)
+        context_builder = build_context_builder(settings)
+        clock = SimClock(
+            sim_day_seconds=settings.sim_day_seconds,
+            sim_start_date=settings.sim_start_date,
+            sim_epoch_wallclock=settings.sim_epoch_wallclock,
+        )
         logger.info("alert_engine.started", interval=settings.evaluation_interval_seconds)
 
         while True:
-            now = dt.datetime.now(dt.UTC)
-            bdate = business_date_for(now)
-            ctx = RuleContext(
-                now=now,
-                current_business_date=bdate,
-            )
-            engine.evaluate_cycle(ctx)
+            now = clock.now_sim()
+            bdate = now.date()
+            ctx = context_builder.build(now=now, current_business_date=bdate)
+            fired, resolved = engine.evaluate_cycle(ctx)
+            if fired or resolved:
+                logger.info("alert_engine.cycle", fired=len(fired), resolved=len(resolved))
             time.sleep(settings.evaluation_interval_seconds)
     except (KeyboardInterrupt, SystemExit):
         logger.info("alert_engine.stopped")
