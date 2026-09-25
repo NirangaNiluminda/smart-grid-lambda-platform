@@ -1,0 +1,85 @@
+{
+  "title": "Smart Grid Overview",
+  "uid": "smart-grid-overview",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "utc",
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "30s",
+  "tags": ["smart-grid", "lambda"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Grid Load & Solar Generation by Zone (1-min windows)",
+      "description": "rt_zone_metrics, speed layer. Each series is one grid_zone.",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres-serving" },
+      "fieldConfig": { "defaults": { "unit": "kwatth", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT window_start AS \"time\", grid_zone, total_consumption_kwh AS \"consumption_kwh\" FROM rt_zone_metrics WHERE window_type = 'tumbling_1m' AND $__timeFilter(window_start) ORDER BY window_start",
+          "datasource": { "type": "postgres", "uid": "postgres-serving" }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Current Renewable Contribution by Zone",
+      "description": "Latest tumbling_1m window per zone. The brief's 'renewable contribution considerably low' alert fires on this.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "postgres", "uid": "postgres-serving" },
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "renewable_pct" }, "properties": [{ "id": "unit", "value": "percent" }] }
+      ] },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT DISTINCT ON (grid_zone) grid_zone AS \"Zone\", renewable_pct AS \"renewable_pct\", active_meter_count AS \"Active Meters\", window_end AS \"As Of\" FROM rt_zone_metrics WHERE window_type = 'tumbling_1m' ORDER BY grid_zone, window_start DESC",
+          "datasource": { "type": "postgres", "uid": "postgres-serving" }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Open Alerts",
+      "gridPos": { "h": 8, "w": 4, "x": 12, "y": 9 },
+      "datasource": { "type": "postgres", "uid": "postgres-serving" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null },
+        { "color": "orange", "value": 1 },
+        { "color": "red", "value": 3 }
+      ] } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS \"Open Alerts\" FROM alerts WHERE resolved_at IS NULL",
+          "datasource": { "type": "postgres", "uid": "postgres-serving" }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Latest Reconciled Daily Billing (top 20 by net amount)",
+      "description": "daily_household_billing, batch layer.",
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 9 },
+      "datasource": { "type": "postgres", "uid": "postgres-serving" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT business_date AS \"Date\", household_id AS \"Household\", grid_zone AS \"Zone\", total_consumption_kwh AS \"kWh\", net_amount AS \"Net Amount\", currency AS \"Currency\" FROM daily_household_billing WHERE business_date = (SELECT max(business_date) FROM daily_household_billing) ORDER BY net_amount DESC LIMIT 20",
+          "datasource": { "type": "postgres", "uid": "postgres-serving" }
+        }
+      ]
+    }
+  ]
+}

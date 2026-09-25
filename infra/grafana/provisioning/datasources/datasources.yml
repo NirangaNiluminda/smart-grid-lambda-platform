@@ -1,0 +1,27 @@
+# Auto-provisioned on Grafana startup. Two sources, matching the two things
+# worth graphing: Postgres holds the actual domain metrics (kWh, renewable %,
+# billing — written by stream-processor / batch-processor); Prometheus holds
+# operational counters (records consumed/rejected, request latency).
+apiVersion: 1
+
+datasources:
+  - name: Postgres (serving)
+    uid: postgres-serving
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: energy_serving
+    user: serving_ro
+    isDefault: true
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: serving_ro
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false

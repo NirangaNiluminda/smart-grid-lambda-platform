@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: smart-grid
+    folder: Smart Grid
+    type: file
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
