@@ -229,41 +229,51 @@ if _AIRFLOW:  # pragma: no cover
         tags=["batch-layer", "lambda", "part2"],
     )
     def daily_energy_reconciliation_pipeline() -> None:
+        # Every task parameter below is named `business_date_str`, deliberately
+        # NOT `ds` -- `ds` is a reserved Airflow context-variable name, and the
+        # @task decorator rewrites *any* parameter named `ds` into an
+        # implicitly-defaulted context kwarg at decoration time, regardless of
+        # whether the call site also passes it explicitly. That silently broke
+        # record_run's signature (a non-default parameter after an
+        # auto-defaulted `ds`), which failed the whole DAG's import -- it never
+        # actually parsed successfully. The other five tasks *happened* not to
+        # trip the same Python-level error (each had only the one parameter),
+        # but were relying on the same fragile, unintended magic.
         @task
-        def validate_feed(ds: str) -> dict[str, int]:
+        def validate_feed(business_date_str: str) -> dict[str, int]:
             # Retried (default_args) so a batch-file-generator / ingestion
             # timing gap of a few seconds self-heals instead of failing the run.
-            bdate = dt.date.fromisoformat(ds)
+            bdate = dt.date.fromisoformat(business_date_str)
             return validate_feed_files(landing_root, bdate)
 
         @task
-        def wait_for_lake(ds: str) -> bool:
-            bdate = dt.date.fromisoformat(ds)
+        def wait_for_lake(business_date_str: str) -> bool:
+            bdate = dt.date.fromisoformat(business_date_str)
             return verify_lake_partition(lake_root, bdate)
 
         @task
-        def run_batch(ds: str) -> int:
-            bdate = dt.date.fromisoformat(ds)
+        def run_batch(business_date_str: str) -> int:
+            bdate = dt.date.fromisoformat(business_date_str)
             bills, _ = execute_batch_job(bdate, lake_root, landing_root, pg_dsn, reports_dir)
             return bills
 
         @task
-        def dq_gate(ds: str) -> None:
-            bdate = dt.date.fromisoformat(ds)
+        def dq_gate(business_date_str: str) -> None:
+            bdate = dt.date.fromisoformat(business_date_str)
             check_dq_gate(pg_dsn, bdate)
 
         @task
-        def publish_report(ds: str) -> str:
-            bdate = dt.date.fromisoformat(ds)
+        def publish_report(business_date_str: str) -> str:
+            bdate = dt.date.fromisoformat(business_date_str)
             path = publish_report_artifact(bdate, reports_dir, published_dir)
             return str(path)
 
         @task
-        def record_run(ds: str, rows_written: int) -> None:
-            bdate = dt.date.fromisoformat(ds)
+        def record_run(business_date_str: str, rows_written: int) -> None:
+            bdate = dt.date.fromisoformat(business_date_str)
             record_batch_run(
                 pg_dsn=pg_dsn,
-                run_id=f"run-{ds}",
+                run_id=f"run-{business_date_str}",
                 dag_id=DAG_ID,
                 business_date=bdate,
                 status="success",

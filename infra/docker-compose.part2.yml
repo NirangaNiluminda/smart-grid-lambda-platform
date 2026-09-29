@@ -87,6 +87,12 @@ services:
       context: ..
       dockerfile: orchestration/airflow/Dockerfile
     container_name: sg-airflow
+    # The image's default non-root `airflow` user (uid 50000) can't write to
+    # bind-mounted host directories whose filesystem doesn't honour per-file
+    # ownership for non-root uids (e.g. a fuseblk/NTFS-3G mount) -- reports/
+    # writes fail with a plain PermissionError. Running as root is the
+    # standard fix Airflow's own docs give for bind-mount uid mismatches.
+    user: "0:0"
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,7 +103,13 @@ services:
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
       # The REST API is how batch-file-generator triggers a run (basic auth);
       # the webserver's own login keeps session auth on top of that.
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+      # NOTE: with this image's auth manager (AIRFLOW__CORE__AUTH_MANAGER =
+      # FabAuthManager, the 2.10.x default), the classic [api] auth_backends
+      # setting is NOT what the REST API checks -- it's authenticated fine but
+      # every request gets a 403 regardless of role/permissions. The FAB
+      # provider moved this to [fab] auth_backends with its own module paths;
+      # see https://airflow.apache.org/docs/apache-airflow-providers-fab/stable/auth-manager/api-authentication.html
+      AIRFLOW__FAB__AUTH_BACKENDS: airflow.providers.fab.auth_manager.api.auth.backend.basic_auth,airflow.providers.fab.auth_manager.api.auth.backend.session
       # daily_energy_reconciliation is triggered externally (schedule=None);
       # this only controls the DAG's own required-but-unused start_date.
       AIRFLOW__SCHEDULER__CATCHUP_BY_DEFAULT: "false"
@@ -111,9 +123,32 @@ services:
       - ../orchestration/airflow/dags:/opt/airflow/dags:ro
       - ../data:/data
       - ../reports:/opt/airflow/reports
-    # `standalone` (webserver + scheduler + triggerer in one process) is fine
-    # at this scale; production would split these into separate services.
-    command: ["standalone"]
+    # webserver + scheduler in one container is fine at this scale;
+    # production would split these into separate, independently-scaled
+    # services.
+    #
+    # NOT `standalone`: it bootstraps its own admin user with a fresh
+    # random password every start (ignoring _AIRFLOW_WWW_USER_USERNAME/
+    # PASSWORD) *and*, more fundamentally, forces the API onto session-only
+    # auth at runtime regardless of AIRFLOW__API__AUTH_BACKENDS -- basic auth
+    # (what AirflowDagTrigger uses) gets a 403 unconditionally under
+    # `standalone`. Plain `webserver`/`scheduler` respect the configured auth
+    # backends normally.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        airflow db migrate
+        # Delete-then-create, not create-if-missing: the `pg-data` volume
+        # persists across restarts, so a plain `create` silently no-ops
+        # against whatever admin user (and whatever password) already exists
+        # from an earlier start -- e.g. `standalone`'s random-password
+        # bootstrap the very first time this project's compose stack ran.
+        # This guarantees admin/admin every time, matching the docs.
+        airflow users delete --username admin >/dev/null 2>&1 || true
+        airflow users create --username admin --password admin \
+          --firstname Admin --lastname User --role Admin --email admin@example.com
+        airflow scheduler &
+        exec airflow webserver
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 15s
