@@ -11,7 +11,8 @@ PARTITIONS="${KAFKA_READINGS_PARTITIONS:-6}"
 RETENTION_MS="${KAFKA_READINGS_RETENTION_MS:-604800000}"  # 7 days
 
 KT=/opt/kafka/bin/kafka-topics.sh
-run() { docker compose -f "$COMPOSE_FILE" exec -T "$KAFKA_SVC" "$@"; }
+# --env-file .env : see Makefile's COMPOSE for why this is needed.
+run() { docker compose --env-file .env -f "$COMPOSE_FILE" exec -T "$KAFKA_SVC" "$@"; }
 
 echo "Waiting for Kafka to accept admin commands..."
 for _ in $(seq 1 30); do

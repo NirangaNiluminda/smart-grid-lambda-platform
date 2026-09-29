@@ -34,7 +34,7 @@ cp .env.example .env
 make install
 make up && make topics && make seed
 # confirm upstream is alive:
-docker compose -f infra/docker-compose.yml exec kafka \
+docker compose --env-file .env -f infra/docker-compose.yml exec kafka \
   kafka-console-consumer --bootstrap-server localhost:9092 --topic meter.readings --max-messages 3
 ls -R data/lake/readings_raw/
 ```

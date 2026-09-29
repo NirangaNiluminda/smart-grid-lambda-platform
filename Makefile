@@ -1,7 +1,13 @@
 # Developer entrypoints. Run `make help` for the list.
 SHELL := /bin/bash
-COMPOSE := docker compose -f infra/docker-compose.yml
-COMPOSE_FULL := docker compose -f infra/docker-compose.yml -f infra/docker-compose.part2.yml
+# --env-file .env is required: the compose files live in infra/, and without
+# it Compose looks for .env in infra/ instead of the repo root, silently
+# ignoring every setting in .env and falling back to each ${VAR:-default} in
+# the YAML. (Not --project-directory: that would *also* re-root the `context:
+# ..` / `../data` relative paths the compose files already resolve correctly
+# relative to infra/, breaking the build instead.)
+COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
+COMPOSE_FULL := docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.part2.yml
 
 # Some external drives mount noexec, so the venv's console scripts won't run
 # directly. Always drive tools through the interpreter.
@@ -66,10 +72,10 @@ logs: ## Tail logs from all running services
 	$(COMPOSE_FULL) logs -f --tail=100
 
 topics: ## Create Kafka topics with the agreed partitioning
-	./scripts/create_topics.sh
+	bash scripts/create_topics.sh
 
 seed: ## Load dimension data into Postgres
-	./scripts/seed_database.sh
+	bash scripts/seed_database.sh
 
 demo: ## End-to-end demo (Part 1). DEMO_FULL=1 for the Part 2 path.
-	./scripts/demo.sh
+	bash scripts/demo.sh

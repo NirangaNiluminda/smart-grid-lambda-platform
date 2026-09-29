@@ -31,7 +31,7 @@ adapters/     landing_zone.py    — atomic CSV write + _SUCCESS marker last
 ## Run
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d batch-file-generator
+docker compose --env-file .env -f infra/docker-compose.yml up -d batch-file-generator
 # or locally:
 python -m batch_file_generator
 ```

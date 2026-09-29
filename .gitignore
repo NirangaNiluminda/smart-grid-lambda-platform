@@ -24,7 +24,8 @@ data/landing/*
 data/lake/*
 !data/lake/.gitkeep
 data/checkpoints/
-reports/out/
+reports/*
+!reports/.gitkeep
 
 # --- Infra / orchestration runtime ---
 orchestration/airflow/logs/

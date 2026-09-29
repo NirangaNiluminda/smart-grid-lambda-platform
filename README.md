@@ -82,7 +82,7 @@ The platform uses a layered Docker Compose architecture with dedicated `Dockerfi
 3. **Part 2 Overlay Compose (`infra/docker-compose.part2.yml`):**
    - Layers downstream processing, serving, and orchestration onto the base stack using Docker Compose multi-file merging:
      ```bash
-     docker compose -f infra/docker-compose.yml -f infra/docker-compose.part2.yml up -d --build
+     docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.part2.yml up -d --build
      ```
    - Run via `make up-full`.
 
@@ -131,7 +131,7 @@ make test           # unit tests, no infrastructure needed
 make up             # Kafka + Postgres + Prometheus + sources + ingestion
 make topics         # create Kafka topics
 make seed           # populate Postgres dimension tables
-docker compose -f infra/docker-compose.yml logs -f meter-simulator ingestion
+docker compose --env-file .env -f infra/docker-compose.yml logs -f meter-simulator ingestion
 ```
 
 ### Option B: Full Stack (Part 1 + Part 2 Layer)

@@ -28,10 +28,10 @@ make seed                       # load dim_zone / dim_household / dim_date into 
 Watch it work:
 
 ```bash
-docker compose -f infra/docker-compose.yml logs -f meter-simulator ingestion
+docker compose --env-file .env -f infra/docker-compose.yml logs -f meter-simulator ingestion
 
 # readings landing on the topic
-docker compose -f infra/docker-compose.yml exec kafka \
+docker compose --env-file .env -f infra/docker-compose.yml exec kafka \
   kafka-console-consumer --bootstrap-server localhost:9092 --topic meter.readings --max-messages 5
 
 # Parquet partitions appearing

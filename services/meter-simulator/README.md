@@ -32,7 +32,7 @@ and a fake clock (`tests/`).
 
 ```bash
 # via compose (normal)
-docker compose -f infra/docker-compose.yml up -d meter-simulator
+docker compose --env-file .env -f infra/docker-compose.yml up -d meter-simulator
 
 # locally
 python -m meter_simulator          # reads .env
