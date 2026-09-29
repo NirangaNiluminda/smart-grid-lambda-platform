@@ -22,9 +22,10 @@ scrape_configs:
   - job_name: stream-processor
     static_configs:
       - targets: ["stream-processor:9111"]
-  - job_name: batch-processor
-    static_configs:
-      - targets: ["batch-processor:9112"]
+  # batch-processor is intentionally not scraped here: it's a one-shot job
+  # invoked in-process by Airflow's run_batch task (services/batch-processor
+  # has profiles: ["manual"] and is never a standing container under
+  # up-full), so a static target for it would show permanently DOWN.
   - job_name: serving-api
     static_configs:
       - targets: ["serving-api:8000"]

@@ -39,11 +39,14 @@ DEMO_FULL=1 make demo
 |---|---|---|
 | **Serving API** | `8000` | OpenAPI docs: `http://localhost:8000/docs`<br>Healthcheck: `http://localhost:8000/healthz`<br>Metrics: `http://localhost:8000/metrics` |
 | **Stream Processor** | `9111` | Metrics: `http://localhost:9111/metrics` |
-| **Batch Processor** | `9112` | Metrics: `http://localhost:9112/metrics` |
 | **Alert Engine** | `9114` | Metrics: `http://localhost:9114/metrics` |
 | **Airflow Web UI** | `8080` | DAG control: `http://localhost:8080` (`admin` / `admin`) |
 | **Prometheus** | `9090` | Targets & TSDB queries: `http://localhost:9090/targets` |
 | **Grafana** | `3000` | Dashboards: `http://localhost:3000` (`admin` / `admin`) |
+
+> `batch-processor` has no standing endpoint on purpose: it's a one-shot job
+> invoked in-process by Airflow's `run_batch` task, not a long-running
+> container (see §3.2/§3.3), so it's not on Prometheus's scrape list either.
 
 ---
 
