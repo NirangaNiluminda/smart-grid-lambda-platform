@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    participant Sim as meter-simulator
+    participant K as Kafka
+    participant Ing as ingestion
+    participant Lake as Parquet lake
+    participant SP as stream-processor
+    participant PG as Postgres
+    participant BFG as batch-file-generator
+    participant AF as Airflow
+    participant BP as batch-processor
+    participant API as serving-api
+    loop every ~2 simulated seconds
+        Sim->>K: MeterReading (key = grid_zone)
+        K->>Ing: consume
+        Ing->>Lake: append Parquet (business_date=D)
+        K->>SP: consume
+        SP->>PG: upsert rt_zone_metrics (windowed)
+    end
+    Note over BFG: at simulated midnight (D -> D+1)
+    BFG->>Lake: (via ingestion) day D partition closes, _SUCCESS written
+    BFG->>AF: tariff_reference_D.csv, weather_forecast_D.csv, _SUCCESS
+    BFG->>AF: trigger daily_energy_reconciliation for business_date=D
+    AF->>BP: run batch-processor --business-date D
+    BP->>Lake: read business_date=D
+    BP->>PG: write daily_household_billing, daily_zone_solar_summary
+    AF->>PG: insert batch_runs audit row
+    API->>PG: GET /api/billing/daily/D -> "final"
+    API->>PG: GET /api/realtime/zones -> "provisional" (day D+1 so far)

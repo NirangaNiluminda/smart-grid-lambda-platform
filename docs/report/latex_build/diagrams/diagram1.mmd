@@ -1,0 +1,27 @@
+flowchart LR
+    subgraph Sources["Simulated sources (Python)"]
+        MS["meter-simulator (streaming, ~2s)"]
+        BFG["batch-file-generator (daily drop)"]
+    end
+    subgraph Platform["Data platform"]
+        K[("Kafka: meter.readings")]
+        LZ[/"Landing zone: tariff + weather CSV"/]
+        LAKE[("Parquet master dataset")]
+        SPEED["Speed layer: Spark Structured Streaming"]
+        BATCH["Batch layer: Spark batch + Airflow"]
+        PG[("PostgreSQL serving store")]
+        API["serving-api (FastAPI)"]
+        ALERT["alert-engine"]
+    end
+    Consumers["Grid ops dashboard - Billing team - Graders"]
+    MS --> K
+    BFG --> LZ
+    K --> SPEED
+    K --> ING["ingestion"] --> LAKE
+    LAKE --> BATCH
+    LZ --> BATCH
+    SPEED --> PG
+    BATCH --> PG
+    PG --> API --> Consumers
+    PG --> ALERT
+    ALERT --> PG

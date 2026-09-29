@@ -6,14 +6,6 @@
 **Repository:** <https://github.com/NirangaNiluminda/smart-grid-lambda-platform>
 **Authors:** G.W. Niranga Niluminda (Dev A — Foundation & Ingestion) · _\<Dev B name\>_ (Dev B — Processing, Serving & Observability)
 
-> **How to use this draft.** This is a first full pass at every section of the
-> report, written from the design documents and code already in the repository
-> so the two of you are not starting from a blank page. Before submission:
-> (1) fill in Dev B's name above and in the Appendix, (2) replace the `[SCREENSHOT: ...]`
-> placeholders in §9 with real captures from a live `make up-full` run,
-> (3) read it once in your own voice and adjust anything that doesn't reflect
-> how you'd explain it in the viva — you need to be able to defend every line.
-
 ---
 
 ## 1. Introduction
@@ -86,7 +78,7 @@ average them into the results (see §5 and §6).
 
 ## 2. Architecture Decision: Lambda vs Kappa
 
-*(Full written decision record: `docs/decisions/ADR-0001-lambda-vs-kappa.md`.)*
+*(Full written decision record: see ADR-0001 in* `docs/decisions/`*.)*
 
 ### 2.1 The forces
 
@@ -167,8 +159,7 @@ recomputation is what tips the decision to Lambda.
 
 ## 3. Designed Architecture
 
-*(Full diagrams: `docs/ARCHITECTURE.md`. Render the Mermaid sources there to
-images for the final PDF — see the note at the end of this section.)*
+*(Source diagrams: `docs/ARCHITECTURE.md`.)*
 
 ### 3.1 Context
 
@@ -262,7 +253,7 @@ sequenceDiagram
 Every service (both Part 1 and Part 2) is organised the same way, so
 understanding one means understanding all of them:
 
-```
+```text
 services/<name>/src/<pkg>/
   domain/        pure business rules + models + port interfaces (no framework imports)
   application/   use-cases that orchestrate the domain via ports
@@ -298,18 +289,12 @@ flowchart TB
 Compose's multi-file merge. One Postgres instance hosts two databases
 (`energy_serving` for the platform, `airflow` for Airflow's own metadata).
 
-> **Note for the final PDF:** the Mermaid diagrams above render directly on
-> GitHub and in most Markdown viewers. For the submitted PDF, either export
-> them as images (e.g. via the Mermaid CLI or a "print to PDF" of the rendered
-> Markdown) and embed the images, or reproduce them as static diagrams in your
-> word processor of choice.
-
 ---
 
 ## 4. Technology Stack
 
-*(Full justification with rejected alternatives per component:
-`docs/decisions/ADR-0002-technology-stack.md`.)*
+*(Full justification with rejected alternatives per component: see ADR-0002
+in* `docs/decisions/`*.)*
 
 | Layer | Choice | Why, for this use case |
 |---|---|---|
@@ -395,8 +380,7 @@ detectable — see §10.
 1. **Ingest + DLQ** — parses each message, splits valid from invalid via a
    Spark UDF that calls the *same* `validate_reading` function the batch layer
    uses, and writes invalid rows to the DLQ topic with the reason attached.
-2. **Tumbling window (1 minute)** — `groupBy(window(event_timestamp, "1
-   minute"), grid_zone)` with a 2-minute watermark, aggregating
+2. **Tumbling window (1 minute)** — `groupBy(window(event_timestamp, "1 minute"), grid_zone)` with a 2-minute watermark, aggregating
    `sum(power_consumption_kwh)`, `sum(solar_generation_kwh)` and an
    approximate distinct count of meters, then computing `renewable_pct`.
 3. **Sliding window (5 minutes, sliding every 1 minute)** — the same
@@ -426,9 +410,9 @@ final stored total is the sum of all of them, not just the last one.
    households from Postgres.
 4. For each household, computes the **energy balance** — how much of its
    consumption was met by its own solar, how much came from the grid, and how
-   much solar was exported — via the shared `energy_common.domain.transforms.
-   energy_balance` function (the same net-metering split used everywhere a
-   solar/consumption split is needed).
+   much solar was exported — via the shared
+   `energy_common.domain.transforms.energy_balance` function (the same
+   net-metering split used everywhere a solar/consumption split is needed).
 5. Applies a **billing Strategy** selected by the household's `billing_tier`:
    `FlatBillingStrategy` (a single rate on grid import, less an export
    credit), `TieredBillingStrategy` (block rates with increasing multipliers),
@@ -464,8 +448,8 @@ As verified in a full end-to-end run, that automated REST API call currently
 returns a 403 from Airflow's authorization layer despite confirmed-correct
 credentials and RBAC permissions — an unresolved, time-boxed issue documented
 in `TASKS.md`. The call is deliberately best-effort (a logged warning, nothing
-crashes), and the **manual trigger**, `airflow dags trigger
-daily_energy_reconciliation -e <date>`, is unaffected (it goes through the
+crashes), and the **manual trigger**,
+`airflow dags trigger daily_energy_reconciliation -e <date>`, is unaffected (it goes through the
 Airflow CLI against the metadata database directly, not the REST API) and is
 what was used to produce every batch-layer result in §9. This is called out
 here rather than glossed over: getting a pipeline to *look* finished and
@@ -510,9 +494,10 @@ inspectable expression of the Lambda merge rule described in §2 and §3.
 
 **Structured logging.** Every service logs JSON to stdout via a shared
 `structlog` setup, with mandatory fields (`ts, level, service, event`) and
-contextual fields bound per unit of work (`business_date, correlation_id,
-records_in/out/rejected, latency_ms`, …), so a single `business_date` can be
-grepped across every stage of the pipeline it touched.
+contextual fields bound per unit of work
+(`business_date, correlation_id, records_in/out/rejected, latency_ms`, …), so
+a single `business_date` can be grepped across every stage of the pipeline it
+touched.
 
 **Metrics.** Every service exposes `/metrics` for Prometheus:
 `records_produced/consumed/rejected_total`, `consumer_lag`,
@@ -539,6 +524,13 @@ what's currently wrong, not an ever-growing log.
 `GET /healthz` on `serving-api` gives a synchronous health check on top of the
 asynchronous alerting: it fails if Postgres is unreachable or if the newest
 zone metric is older than `freshness_budget_minutes`.
+
+**Verified live**, not just wired: Prometheus's `/targets` page shows every
+scraped service healthy, and Grafana's provisioned "Smart Grid Overview"
+dashboard (a Postgres datasource and a Prometheus datasource, both
+auto-provisioned from `infra/grafana/provisioning/`) loads and renders the
+same numbers the API returns. Getting both of these actually reachable
+surfaced two configuration bugs of their own — see §10.
 
 ---
 
@@ -632,6 +624,21 @@ deployment: API auth, a secrets manager, network policies between services,
 and encryption at rest for the household/billing data, which is personally
 identifiable in a real deployment even though it is synthetic here.
 
+**Observability configuration needs the same live verification as the
+pipeline itself.** Two bugs surfaced only by clicking through every
+documented UI link before the demo recording, not by re-reading code: Grafana
+carried a Docker Compose `profiles` tag that nothing ever activated, so
+`localhost:3000` silently never started under the documented `make up-full`
+flow despite being described as part of the normal stack; and Prometheus's
+scrape config had a static target for `batch-processor:9112`, a service that
+is deliberately never a long-running container (it's a one-shot job Airflow
+invokes in-process), so the Targets page showed a permanently misleading
+`DOWN` row for a service that was never supposed to be scraped in the first
+place. Neither was caught by any test, because tests exercise the pipeline's
+logic, not whether a dashboard link actually resolves — the lesson generalises
+beyond this project: a monitoring stack's own wiring can drift from what it
+claims to monitor, and the only real check is opening the link.
+
 **Cross-service automation is more fragile than any single service.** The
 Airflow REST-API trigger (§6.3) is the clearest example encountered in this
 project: every individual piece — the DAG, the credentials, the RBAC
@@ -671,22 +678,34 @@ troubleshooting.
 | **Dev A — G.W. Niranga Niluminda** | Architecture decision & ADRs; `energy_common` shared kernel (domain models, ports, config, logging, sim-clock, Kafka/Postgres/Parquet adapters); both simulated sources (`meter-simulator`, `batch-file-generator`); Kafka ingestion → Parquet master dataset; database schema; Part 1 Docker Compose; project documentation set; post-merge hardening of the Part 2 processing layers (see below). |
 | **Dev B — _\<name\>_** | Initial implementation of the speed layer, batch layer, Airflow orchestration, serving API, and observability alert-engine + Grafana dashboard. |
 
-_A short, honest note on the hardening pass (delete this note once you've
-agreed on wording, but keep an accurate statement of who did what — the brief
-requires it): a review before the final submission found that the first
+_A short, honest note on the hardening pass: a review before the final submission found that the first
 implementation of the processing layers, while structurally correct and fully
-unit-tested, had four issues that would only surface under real execution —
-the speed layer's windowed totals could undercount, the alerting rules were
-never fed live data, the Airflow image could not run the batch job, and the
-DAG's schedule would never fire inside a compressed demo. These were fixed in
-a follow-up pass (rewriting the speed and batch layers onto genuine Spark, and
-wiring the alert engine and orchestration to real data), documented in
-`TASKS.md`. Both authors should be able to explain and defend this code in the
-viva, including the fixes._
+unit-tested, had issues that only surfaced under real execution — the speed
+layer's windowed totals could undercount, the alerting rules were never fed
+live data, the Airflow image could not run the batch job, and the DAG's
+schedule would never fire inside a compressed demo. These were fixed in a
+follow-up pass (rewriting the speed and batch layers onto genuine Spark, and
+wiring the alert engine and orchestration to real data). A second pass —
+actually running the entire `make up-full` stack together as one system for
+the first time, rather than validating each service in isolation — found and
+fixed ten further bugs no unit or isolated-integration test could have caught:
+an unpinned base image that broke a JDK install, `.env` silently never being
+read by any script or Makefile target, a missing restart policy that turned a
+transient startup race into a permanent crash, a `\copy` meta-command sent the
+wrong way in the seed script, a crash-looping alert-engine on any single bad
+cycle, three separate layers of an Airflow authentication misconfiguration,
+a DAG that had **never once successfully parsed** (a reserved-parameter-name
+collision with Airflow's `@task` decorator), a SQLAlchemy 1.4/2.0 import
+mismatch, and a filesystem permission issue writing report artifacts — plus,
+in a final pre-recording dry run, two dead observability-config entries
+(a Grafana container gated behind an unused Compose profile, and a Prometheus
+scrape target for a service that is architecturally never scraped). Every one
+of these is documented with its root cause in `TASKS.md`; both authors should
+be able to explain and defend this code in the viva, including the fixes._
 
 ### C. Assumptions, simplifications, and simulated-time compression
 
-Restated from §1.3 for the grader's convenience: `SIM_DAY_SECONDS=<fill in the
-value used for your recorded demo>`; 200 synthetic households across 6 grid
+Restated from §1.3 for the grader's convenience:
+`SIM_DAY_SECONDS=<fill in the value used for your recorded demo>`; 200 synthetic households across 6 grid
 zones; illustrative (not real-world) tariff rates; single-node deployment
 throughout.

@@ -183,6 +183,27 @@ Acceptance criteria per task are in [`docs/PART2_ONBOARDING.md`](docs/PART2_ONBO
 > an untested candidate) or plan the recording around the manual trigger step
 > explicitly (already how `docs/report/DEMO_RECORDING_PLAN.md` is written).
 
+> **Pre-recording dry run (2026-09-29, later same day) — two more bugs, this
+> time in the observability config itself, not the pipeline:** (9) `grafana`
+> in `infra/docker-compose.part2.yml` carried `profiles: ["dashboards"]`, a
+> profile nothing in the Makefile or docs ever activates, so `localhost:3000`
+> silently never came up under the documented `make up-full` flow despite
+> RUNBOOK.md and the demo plan describing it as part of the normal stack —
+> removed the profile gate. (10) Prometheus's scrape config had a static
+> target for `batch-processor:9112`, which can never resolve: `batch-processor`
+> is deliberately `profiles: ["manual"]` (a one-shot job Airflow's `run_batch`
+> task invokes in-process, never a standing container), so the Targets page
+> showed a permanent, misleading `DOWN` row — removed the dead scrape job and
+> the matching endpoint-table row in RUNBOOK.md. Both found by actually
+> opening every documented UI link before recording, not by re-reading the
+> compose files; both are now fixed and verified live (Grafana's provisioned
+> datasources + dashboard load correctly; all 7 remaining Prometheus targets
+> report `up`). Also noted during this dry run: the Airflow UI's plain
+> "Trigger DAG" button defaults to *today's real wallclock date*, which never
+> matches a simulated `business_date` — not a bug, but worth knowing before
+> triggering on camera (use `airflow dags trigger ... -e <business_date>`, or
+> "Trigger DAG w/ config" with an explicit logical date).
+
 ### B1 · stream-processor (speed layer)
 - [x] Real Spark Structured Streaming (readStream/writeStream, not a polling loop) + `config.py` + composition root
 - [x] transform pipeline reusing `energy_common.domain.transforms` (parse → validate → enrich → window), Spark UDFs call the *same* shared functions

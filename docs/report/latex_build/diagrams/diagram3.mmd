@@ -1,0 +1,12 @@
+flowchart TB
+    subgraph compose["docker compose"]
+        subgraph p1["infra/docker-compose.yml"]
+            kafka; postgres; prometheus
+            meter-simulator; batch-file-generator; ingestion
+        end
+        subgraph p2["infra/docker-compose.part2.yml (overlay)"]
+            airflow
+            stream-processor; batch-processor
+            serving-api; alert-engine; grafana
+        end
+    end
