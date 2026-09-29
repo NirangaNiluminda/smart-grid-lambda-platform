@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1
 # Spark Structured Streaming needs a JVM; python:3.11-slim doesn't ship one.
-FROM python:3.11-slim
+# Pinned to -bookworm (Debian 12): the unpinned python:3.11-slim tag now
+# resolves to Debian trixie, which dropped the openjdk-17-jre-headless
+# package (only openjdk-21 is available there) -- pinning avoids the build
+# silently breaking again the next time Debian's default rolls forward.
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

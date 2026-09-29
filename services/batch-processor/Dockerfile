@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 # Spark's batch reader needs a JVM; python:3.11-slim doesn't ship one.
-FROM python:3.11-slim
+# Pinned to -bookworm (Debian 12) -- see services/stream-processor/Dockerfile
+# for why (the unpinned tag rolled to a Debian release without openjdk-17).
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
