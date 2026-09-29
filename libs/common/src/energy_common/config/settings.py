@@ -13,7 +13,7 @@ from functools import lru_cache
 from typing import Literal
 
 from energy_common.domain.errors import ConfigError
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,17 @@ class BaseServiceSettings(BaseSettings):
     sim_day_seconds: float = Field(default=600.0, gt=0)
     sim_epoch_wallclock: dt.datetime | None = None
     sim_start_date: dt.date = dt.date(2026, 1, 1)
+
+    @field_validator("sim_epoch_wallclock", mode="before")
+    @classmethod
+    def _blank_env_value_means_unset(cls, v: object) -> object:
+        # `.env.example` documents SIM_EPOCH_WALLCLOCK= (blank) as "leave unset
+        # to anchor on process start" -- but a blank line in a .env file sets
+        # the env var to "", not "absent", and pydantic then fails trying to
+        # parse "" as a datetime. Every service reading the exact .env the
+        # docs tell you to create (`cp .env.example .env`) would crash at
+        # startup on this before it did anything else.
+        return None if v == "" else v
 
     # --- observability ---
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

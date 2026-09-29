@@ -11,7 +11,15 @@ from __future__ import annotations
 from functools import lru_cache
 
 try:
-    from sqlalchemy import Engine, create_engine, text
+    # sqlalchemy.Engine (the top-level re-export) only exists from SQLAlchemy
+    # 2.0 on; sqlalchemy.engine.Engine is the same class and has been there
+    # since 1.4. This module runs both standalone (SQLAlchemy>=2.0, per each
+    # service's own pyproject.toml) and in-process inside the Airflow
+    # container, which bundles SQLAlchemy 1.4.x and is installed with
+    # --no-deps specifically so it keeps *that* pin -- importing from the
+    # older path keeps this module working under both.
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import Engine
 except ModuleNotFoundError as exc:  # pragma: no cover
     raise ModuleNotFoundError(
         "SQLAlchemy is not installed. Add the 'postgres' extra: "
