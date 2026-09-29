@@ -159,7 +159,6 @@ services:
   grafana:
     image: grafana/grafana:11.2.0
     container_name: sg-grafana
-    profiles: ["dashboards"]
     depends_on: [prometheus]
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
