@@ -63,20 +63,33 @@ curl -s http://localhost:8000/api/realtime/zones/zone-north | jq .
 `daily_energy_reconciliation` is **not** on a wall-clock schedule (`schedule=None`)
 — a schedule like `@daily` would never fire inside a demo session where a
 simulated business day closes every `SIM_DAY_SECONDS` (minutes, not a real day).
-Instead, the moment `batch-file-generator` finishes writing a day's feed (right
-after the `_SUCCESS` marker), it calls Airflow's REST API to trigger a run for
-that exact `business_date` (`AIRFLOW_TRIGGER_ENABLED=true`, set automatically by
-`infra/docker-compose.part2.yml`). Watch it happen:
+By design, the moment `batch-file-generator` finishes writing a day's feed
+(right after the `_SUCCESS` marker), it calls Airflow's REST API to trigger a
+run for that exact `business_date` (`AIRFLOW_TRIGGER_ENABLED=true`, set
+automatically by `infra/docker-compose.part2.yml`).
+
+> **Known issue, as of 2026-09-29:** that REST API call currently gets a 403
+> from Airflow regardless of correct credentials and confirmed-correct RBAC
+> permissions — see `TASKS.md`'s live-verification note for what was ruled out.
+> **Use the CLI trigger below; it is fully verified working** and is not
+> affected by this (it talks to the metadata DB directly, not the REST API).
+> `batch-file-generator`'s trigger attempt fails gracefully (a logged warning,
+> nothing crashes) so this doesn't block anything else in the pipeline.
+
+Watch the (currently failing) automated attempt, or just go straight to the CLI trigger:
 
 ```bash
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.part2.yml logs -f batch-file-generator airflow
+docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.part2.yml logs -f batch-file-generator airflow
 ```
 
-**Manual fallback** (trigger disabled, or re-running a past day):
+**Trigger it yourself** (this is the reliable path right now):
 
 ```bash
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.part2.yml exec airflow \
+docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.part2.yml exec airflow \
   airflow dags trigger daily_energy_reconciliation -e 2026-01-01
+# check it landed:
+docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.part2.yml exec airflow \
+  airflow tasks states-for-dag-run daily_energy_reconciliation 2026-01-01
 ```
 
 ### 3.3 Running the Batch Reconciliation Manually
@@ -107,7 +120,7 @@ curl -s http://localhost:8000/api/reports/solar/2026-01-01 | jq .
 ### 3.5 Monitoring Active & Resolved Alerts
 Connect to Postgres to query the `alerts` table:
 ```bash
-docker compose -f infra/docker-compose.yml exec postgres \
+docker compose --env-file .env -f infra/docker-compose.yml exec postgres \
   psql -U energy -d energy_serving -c \
   "SELECT rule_name, severity, grid_zone, business_date, message, fired_at, resolved_at FROM alerts ORDER BY fired_at DESC LIMIT 10;"
 ```
@@ -138,7 +151,7 @@ make typecheck
 ### 4.3 Inspecting the Dead Letter Queue
 To inspect invalid messages routed to the DLQ:
 ```bash
-docker compose -f infra/docker-compose.yml exec kafka \
+docker compose --env-file .env -f infra/docker-compose.yml exec kafka \
   kafka-console-consumer --bootstrap-server localhost:9092 \
   --topic meter.readings.dlq --from-beginning --max-messages 5
 ```

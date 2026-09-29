@@ -74,8 +74,8 @@ Acceptance criteria per task are in [`docs/PART2_ONBOARDING.md`](docs/PART2_ONBO
 - [x] `docs/OBSERVABILITY.md` (design + stubs), `docs/REPORT_OUTLINE.md`
 
 ### A10 · Handoff
-- [ ] `make lint typecheck test` green in CI
-- [ ] `make up && make topics && make seed` verified on a clean machine
+- [x] `make lint typecheck test` green in CI
+- [x] `make up-full && make topics && make seed` verified for real (2026-09-29 — see the live-verification note below; not just Part 1)
 - [ ] Contracts frozen; PART2_ONBOARDING walkthrough by someone other than the author
 - [ ] Tag `part1-complete`
 
@@ -111,6 +111,78 @@ Acceptance criteria per task are in [`docs/PART2_ONBOARDING.md`](docs/PART2_ONBO
 > are covered by tests, including a new cross-service integration suite
 > (`tests/integration/`) run against real Postgres.
 
+> **Live end-to-end verification (2026-09-29):** the 2026-09-25 hardening pass
+> was validated against real infrastructure piece by piece (a temporary
+> Postgres, a local Spark session) but the full `make up-full` stack had never
+> actually been run together as one system. It was, this session, and found —
+> and fixed — **eight further bugs that no unit or isolated-integration test
+> could have caught**, each one blocking the next: (1) `python:3.11-slim`
+> (unpinned) now resolves to Debian trixie, which dropped `openjdk-17-jre-headless`
+> — pinned stream-processor/batch-processor to `-bookworm`; (2) the compose
+> files live in `infra/`, so a bare `docker compose -f infra/...` resolves its
+> project directory — and therefore `.env` lookup — to `infra/`, silently
+> ignoring the repo-root `.env` project-wide since Part 1 — fixed with
+> `--env-file .env` everywhere (Makefile, scripts, docs); **not**
+> `--project-directory`, which also breaks the `context: ..` build paths;
+> (3) `infra/docker-compose.yml` had no `restart` policy on any Part 1
+> service, so `ingestion`'s expected topics-not-created-yet startup race
+> killed it *permanently* rather than self-healing; (4) `scripts/seed_database.sh`
+> passed `\copy` (a psql client-side meta-command) via `-c`, which can only
+> ever be sent straight to the server as SQL — the seed script had never
+> actually run against live data before; (5) `alert-engine`'s loop caught
+> exceptions around the whole process, not per-cycle, so one bad write (e.g.
+> an unseeded dimension row) crash-looped the entire service; (6) `airflow
+> standalone` bootstraps its own admin user with a fresh random password every
+> start *and* forces the REST API onto session-only auth at runtime regardless
+> of config, so `admin`/`admin` (documented everywhere, and what
+> `AirflowDagTrigger` uses) always got a 403 — switched to plain
+> `webserver`+`scheduler`, which respect the configured auth backends, with an
+> explicit delete-then-recreate of the admin user so a persisted `pg-data`
+> volume can't leave a stale password behind; (7) even so, the API backend
+> setting had the wrong config path for this Airflow version's auth manager
+> (`[api] auth_backends` vs. the FAB provider's `[fab] auth_backends`, a
+> different module path entirely) — **this one is fixed in code but not yet
+> confirmed working**, see the open item below; (8) most fundamentally, the
+> DAG had **never once parsed successfully** — every `@task` function used
+> `ds` as a parameter name, a reserved Airflow context variable that the
+> `@task` decorator silently rewrites into a defaulted kwarg at decoration
+> time, which broke `record_run`'s signature (a non-default parameter after
+> it) and failed the whole file's import. Renamed to `business_date_str`
+> throughout. One more found once the DAG could finally run:
+> `energy_common.storage.postgres` imported `sqlalchemy.Engine` (the
+> SQLAlchemy-2.0-only top-level re-export); Airflow 2.10.2 bundles SQLAlchemy
+> 1.4.x and the Airflow image installs `energy_common` with `--no-deps`
+> specifically to keep that pin — switched to the version-portable
+> `sqlalchemy.engine.Engine` import. And one filesystem-specific one: this dev
+> machine's bind-mount doesn't honour per-uid write permission, so the
+> non-root `airflow` (uid 50000) image user couldn't write the report artifact
+> — added `user: "0:0"` to the airflow service (a standard, documented fix for
+> exactly this bind-mount scenario). **Result:** `daily_energy_reconciliation`
+> ran to completion end to end via `airflow dags trigger` — all 6 tasks green,
+> 200 households billed, `daily_zone_solar_summary` populated for all 6 zones,
+> `batch_runs` recorded `success`, `serving-api` correctly returned
+> `"status": "final"` for the day, and the HTML/CSV report artifacts rendered
+> and published. The speed layer, ingestion, and alert-engine (`NoDataRule`
+> and `LowRenewableRule` both observed firing and resolving correctly) were
+> independently confirmed live and healthy throughout.
+>
+> **Open item — not yet resolved:** `AirflowDagTrigger`'s REST API call still
+> gets a 403 even with the corrected `[fab] auth_backends` config and a
+> confirmed-correct password (verified via `security_manager.auth_user_db()`
+> directly) and confirmed-correct RBAC permissions on the `Admin` role (92
+> permissions including DAG read/create checked directly in `ab_permission_view_role`).
+> The failure mode itself is unresolved — authentication succeeds, authorization
+> still denies — and time-boxed rather than fully root-caused. **This does not
+> block the pipeline**: the trigger call is deliberately best-effort (logs a
+> warning, does not crash `batch-file-generator`), and the documented manual
+> fallback (`airflow dags trigger daily_energy_reconciliation -e <date>`,
+> `docs/RUNBOOK.md §3.2`) is what was actually used above and is fully
+> reliable — it goes through the Airflow CLI/metadata DB directly, not the
+> REST API, so it's unaffected by this issue. Before the demo recording,
+> either resolve the REST API 403 for real (a newer Airflow patch version is
+> an untested candidate) or plan the recording around the manual trigger step
+> explicitly (already how `docs/report/DEMO_RECORDING_PLAN.md` is written).
+
 ### B1 · stream-processor (speed layer)
 - [x] Real Spark Structured Streaming (readStream/writeStream, not a polling loop) + `config.py` + composition root
 - [x] transform pipeline reusing `energy_common.domain.transforms` (parse → validate → enrich → window), Spark UDFs call the *same* shared functions
@@ -133,11 +205,11 @@ Acceptance criteria per task are in [`docs/PART2_ONBOARDING.md`](docs/PART2_ONBO
 - [x] unit tests (strategies + rollup, now against a real local Spark session) ; `Dockerfile` (+ JRE), `README.md`
 
 ### B3 · Airflow DAG
-- [x] `daily_energy_reconciliation` DAG, parametrised `business_date`
-- [x] validate feed → lake `_SUCCESS` → run_batch → dq_gate → publish_report → record_run
+- [x] `daily_energy_reconciliation` DAG, parametrised `business_date` — **parses and runs to completion**, verified live 2026-09-29 (see note above; it had never successfully parsed before — a `ds`-as-parameter-name bug)
+- [x] validate feed → lake `_SUCCESS` → run_batch → dq_gate → publish_report → record_run — all 6 tasks confirmed green in a real run
 - [x] `on_failure_callback` → `alerts` row
 - [x] retries (`default_args`) on the feed/lake checks, to absorb the small timing gap between batch-file-generator and ingestion closing a day
-- [x] **externally triggered** (`schedule=None`) by `AirflowDagTrigger` the moment batch-file-generator closes a simulated day — not a wall-clock schedule, which would never fire inside a compressed demo; manual `airflow dags trigger` remains a documented fallback
+- [~] **externally triggered** (`schedule=None`) by `AirflowDagTrigger` the moment batch-file-generator closes a simulated day — implemented and wired, but the REST API call still 403s (open item above); the **manual CLI trigger fully works** and is what was used to verify the run
 - [x] custom `orchestration/airflow/Dockerfile` — the stock Airflow image had no way to import `batch_processor`
 - [x] backfill verified
 - [x] DAG unit test (`test_dag.py`) — now actually collected by `make test` (`orchestration` added to `testpaths`, plus a `conftest.py` fix; it was silently never running before)
@@ -165,12 +237,12 @@ Acceptance criteria per task are in [`docs/PART2_ONBOARDING.md`](docs/PART2_ONBO
 ### B7 · full compose
 - [x] `infra/docker-compose.part2.yml` — stream-processor, batch-processor, serving-api, alert-engine, Airflow (custom-built image), Grafana
 - [x] Prometheus scrape targets for Part 2 services
-- [x] healthchecks; `make up-full`, `make demo` full path
+- [x] healthchecks; `make up-full` verified live end to end 2026-09-29 (all 10 containers healthy simultaneously)
 
 ### B8 · docs & tests
 - [x] `docs/RUNBOOK.md`
-- [ ] complete `docs/OBSERVABILITY.md §5` (screenshots — needs a live run to capture)
-- [x] e2e test asserting the write/read contract across services holds against real Postgres (`tests/integration/test_end_to_end.py`, `make test-integration`)
+- [ ] complete `docs/OBSERVABILITY.md §5` (screenshots — needs a live run to capture; the run to capture from now exists, see the note above)
+- [x] e2e test asserting the write/read contract across services holds against real Postgres (`tests/integration/test_end_to_end.py`, `make test-integration`) — and, beyond the test suite, the *actual* full pipeline verified live end to end 2026-09-29
 - [x] demo script (`scripts/demo.sh`, `DEMO_FULL=1`)
 
 ### B9 · report

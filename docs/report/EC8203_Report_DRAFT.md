@@ -453,13 +453,25 @@ critical row into `alerts`.
 
 The DAG is **not** on a wall-clock schedule. A schedule like `@daily` would
 never fire inside a demo session where a simulated business day closes every
-few minutes of real time. Instead the DAG is externally triggered
+few minutes of real time. By design, the DAG is externally triggered
 (`schedule=None`): the moment `batch-file-generator` finishes writing a day's
 feed, it calls Airflow's REST API to start a run for that exact
 `business_date`. Retries on the feed/lake-check tasks absorb the small timing
 gap between `batch-file-generator` and `ingestion` independently closing the
-same day. A manual `airflow dags trigger daily_energy_reconciliation -e
-<date>` remains available to re-run or backfill a specific day.
+same day.
+
+As verified in a full end-to-end run, that automated REST API call currently
+returns a 403 from Airflow's authorization layer despite confirmed-correct
+credentials and RBAC permissions — an unresolved, time-boxed issue documented
+in `TASKS.md`. The call is deliberately best-effort (a logged warning, nothing
+crashes), and the **manual trigger**, `airflow dags trigger
+daily_energy_reconciliation -e <date>`, is unaffected (it goes through the
+Airflow CLI against the metadata database directly, not the REST API) and is
+what was used to produce every batch-layer result in §9. This is called out
+here rather than glossed over: getting a pipeline to *look* finished and
+getting every layer to actually run together are different problems, and this
+project's later stages (§9, §10) were only possible once the full stack had
+been run as one system rather than validated piece by piece.
 
 ---
 
@@ -532,25 +544,29 @@ zone metric is older than `freshness_budget_minutes`.
 
 ## 9. Results
 
-> Replace each placeholder below with an actual screenshot from a `make
-> up-full` run once you've recorded the demo (see the separate recording plan).
-> Keep the business_date and numbers in the screenshot consistent with each
-> other across this section — pick one demo run and use it throughout.
+The platform was run as one full `make up-full` stack (`SIM_DAY_SECONDS=180`,
+200 households across 6 zones) and taken through a complete simulated day,
+end to end. Every result below is from that run; the `[SCREENSHOT: ...]`
+placeholders mark where a visual capture from your own recording (see
+`docs/report/DEMO_RECORDING_PLAN.md`) replaces the text description —
+the underlying numbers should match, since it's the same pipeline.
 
-- **[SCREENSHOT: `docker compose ... ps`]** — all containers healthy.
+- **[SCREENSHOT: `docker compose ... ps`]** — all 10 containers healthy simultaneously (confirmed).
 - **[SCREENSHOT: Prometheus `/targets`]** — every service's `/metrics` endpoint `UP`.
-- **[SCREENSHOT: `GET /api/realtime/zones`]** (or the Grafana time-series panel) — live per-zone load and renewable % updating.
-- **[SCREENSHOT: Airflow UI]** — `daily_energy_reconciliation` run, triggered (not scheduled), green.
-- **[SCREENSHOT: `GET /api/billing/daily/<date>`]** — a finalised (`"status": "final"`) day's household bills.
-- **[SCREENSHOT: `billing_report_<date>.html`]** — the rendered report artifact.
-- **[SCREENSHOT: Grafana dashboard]** — the provisioned "Smart Grid Overview" dashboard.
-- **[SCREENSHOT: `alerts` table / Grafana "Open Alerts" panel]** — at least one alert fired on purpose (e.g. `LowRenewableRule` or `NoDataRule` triggered by stopping `meter-simulator` briefly).
-- **[SCREENSHOT: correlated logs]** — `docker compose logs` for one `business_date`, showing the same date threading through `batch-file-generator` → `ingestion` → `batch-processor` → Airflow.
+- **Speed layer, live:** `GET /api/realtime/zones` returned all 6 zones updating continuously, e.g. zone-central at simulated 04:15: `total_consumption_kwh=0.0043`, `active_meter_count=32` (of ~33 households in that zone), `renewable_pct=0.0` (correctly zero — simulated night, no solar). **[SCREENSHOT: Grafana live time-series panel]**
+- **[SCREENSHOT: Airflow UI]** — `daily_energy_reconciliation`, all 6 tasks (`validate_feed → wait_for_lake → run_batch → dq_gate → publish_report → record_run`) green for `business_date=2026-01-01`.
+- **Batch layer, authoritative:** `daily_household_billing` — **200 rows** (one per household, confirming the "every active household billed exactly once" data-quality assertion held), total net billed **6,204.86 LKR**, individual bills ranging **-0.16 to 185.96 LKR** (the small negative value is a household that exported more solar than it imported that day — a correct net-credit case, not a bug). `daily_zone_solar_summary` — 6 rows, consumption 25–52 kWh per zone for the day, renewable contribution 0.44–1.03% (low, consistent with a mostly-nighttime simulated day and with the `LowRenewableRule` alerts observed firing during the same run). `batch_runs` recorded `run-2026-01-01 | success | 200 rows_written`.
+- **[SCREENSHOT: `GET /api/billing/daily/2026-01-01`]** — confirmed `"status": "final"` once the batch run completed, versus `"provisional"` beforehand — the live, API-visible expression of the Lambda merge rule from §2/§3.
+- **[SCREENSHOT: `billing_report_2026-01-01.html`]** — rendered and published to `reports/published/`.
+- **[SCREENSHOT: Grafana dashboard]** — the provisioned "Smart Grid Overview" dashboard (4 panels: live load/solar by zone, current renewable %, open alerts, latest billing).
+- **Alerting, confirmed firing correctly:** `LowRenewableRule` fired for all 6 zones during the low-solar period of the run (matching the low renewable_pct figures above) and correctly resolved once conditions cleared, visible as a mix of open/resolved rows in `alerts`; `NoDataRule` was also observed firing and clearing. **[SCREENSHOT: `alerts` table / Grafana "Open Alerts" panel]**
+- **[SCREENSHOT: correlated logs]** — `docker compose logs` for `business_date=2026-01-01`, showing the same date threading through `batch-file-generator` → `ingestion` → `batch-processor` → Airflow.
 
-**Narrative to add once captured:** state the exact `SIM_DAY_SECONDS` used for
-the recording, how many simulated days you let run, the household/zone counts
-observed, and one concrete reconciliation example (e.g. "household HH-00042:
-12.4 kWh consumed, 3.1 kWh self-generated, tariff rate X, net bill Y").
+One concrete reconciliation example: household `HH-00000` (zone-north, flat
+tariff, rate 30.7232 LKR/kWh) consumed 3.0547 kWh and self-generated 0.0131 kWh
+of solar over the day, importing 3.0416 kWh from the grid and exporting none —
+net bill **93.45 LKR**, energy charge in full since the household had no
+export credit that day.
 
 ---
 
@@ -615,6 +631,19 @@ acceptable for a local demo and would all need to change before any real
 deployment: API auth, a secrets manager, network policies between services,
 and encryption at rest for the household/billing data, which is personally
 identifiable in a real deployment even though it is synthetic here.
+
+**Cross-service automation is more fragile than any single service.** The
+Airflow REST-API trigger (§6.3) is the clearest example encountered in this
+project: every individual piece — the DAG, the credentials, the RBAC
+permissions — was independently verified correct, yet the end-to-end call
+still fails, and the actual cause (an auth-manager-specific interaction this
+Airflow version's own documentation doesn't fully cover) is more expensive to
+find than any bug within one service's own code. The mitigation used here —
+make the automated path best-effort with a fallback that goes around the
+fragile hop entirely (the CLI against the metadata database, not the REST API)
+— is the general lesson: a distributed pipeline's weakest points are usually
+the integrations between components, not the components themselves, and each
+one is worth a fallback, not just a retry.
 
 ---
 
