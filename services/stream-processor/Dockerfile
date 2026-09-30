@@ -19,11 +19,20 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# pyspark is a ~320MB download and by far the slowest, flakiest part of this
+# build -- install it from a pre-fetched local file (scripts/prefetch_pyspark.sh)
+# instead of the network. This COPY sits before the application source COPY
+# below, so editing service code never invalidates this layer or re-triggers
+# the download; it only changes if the pyspark pin itself changes.
+COPY .docker-cache/pyspark-3.5.9.tar.gz /tmp/pyspark-3.5.9.tar.gz
+RUN pip install --upgrade pip \
+ && pip install /tmp/pyspark-3.5.9.tar.gz \
+ && rm /tmp/pyspark-3.5.9.tar.gz
+
 COPY libs/common /app/libs/common
 COPY services/stream-processor /app/services/stream-processor
 
-RUN pip install --upgrade pip \
- && pip install "/app/libs/common[postgres]" \
+RUN pip install "/app/libs/common[postgres]" \
  && pip install /app/services/stream-processor
 
 EXPOSE 9111

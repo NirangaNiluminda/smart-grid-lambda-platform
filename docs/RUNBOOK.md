@@ -20,6 +20,11 @@ make install-part2
 
 ### 1.3 Launch Full Stack
 ```bash
+# Pre-fetch pyspark once, outside the build (it's a ~320MB download; doing it
+# here avoids bandwidth contention with the 6 other images pip-installing at
+# the same time under `--build`, which can time out on a slower connection).
+bash scripts/prefetch_pyspark.sh
+
 # Start all containers: Kafka, Postgres, Prometheus, Grafana, Airflow, and the 5 services
 make up-full
 

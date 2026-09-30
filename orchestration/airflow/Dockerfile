@@ -19,10 +19,20 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
     PYSPARK_DRIVER_PYTHON=/usr/local/bin/python3
 
 USER airflow
+
+# pyspark is a ~320MB download and by far the slowest, flakiest part of this
+# build -- install it from a pre-fetched local file (scripts/prefetch_pyspark.sh)
+# instead of the network. This COPY sits before the application source COPY
+# below, so editing batch-processor/energy_common code never invalidates this
+# layer or re-triggers the download; it only changes if the pyspark pin does.
+COPY --chown=airflow:root .docker-cache/pyspark-3.5.9.tar.gz /tmp/pyspark-3.5.9.tar.gz
+RUN pip install --no-cache-dir /tmp/pyspark-3.5.9.tar.gz \
+ && rm /tmp/pyspark-3.5.9.tar.gz
+
 COPY --chown=airflow:root libs/common /opt/airflow/deps/libs/common
 COPY --chown=airflow:root services/batch-processor /opt/airflow/deps/services/batch-processor
 
 RUN pip install --no-cache-dir --no-deps \
       /opt/airflow/deps/libs/common \
       /opt/airflow/deps/services/batch-processor \
- && pip install --no-cache-dir "pyspark>=3.5,<3.6" pydantic-settings structlog prometheus-client
+ && pip install --no-cache-dir pydantic-settings structlog prometheus-client

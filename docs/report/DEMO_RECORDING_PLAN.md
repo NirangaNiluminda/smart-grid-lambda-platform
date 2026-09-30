@@ -7,10 +7,14 @@ since watching Docker pull layers is not interesting to a grader.
 
 ## Before you hit record
 
-1. **Pre-build everything once, off-camera.** `docker compose ... up -d --build`
-   downloads Kafka/Airflow/Grafana/Postgres/Prometheus and builds 7 custom
-   images (3 of which install a JDK + PySpark) — 10–20 minutes the first time,
-   depending on your connection. Do this beforehand so the recorded run starts
+1. **Pre-build everything once, off-camera.** Run `bash scripts/prefetch_pyspark.sh`
+   first (a resumable, isolated download of the ~320MB PySpark dependency —
+   doing it before `--build` avoids it competing for bandwidth with the other
+   6 images installing at the same time, which has timed out on a slower
+   connection). Then `docker compose ... up -d --build` downloads
+   Kafka/Airflow/Grafana/Postgres/Prometheus and builds 7 custom images (3 of
+   which install a JDK + PySpark) — a few minutes with the prefetch done,
+   10–20 minutes without it, depending on your connection. Do this beforehand so the recorded run starts
    from warm image caches and comes up in well under a minute.
 2. **Pick a short simulated day for the recording.** Set in `.env`:
    ```
