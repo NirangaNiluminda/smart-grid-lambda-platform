@@ -46,7 +46,7 @@ pypandoc.convert_file(
         "-V", "toccolor=black",
         "-V", "title=Smart Grid Energy Monitoring \\\\& Billing",
         "-V", "subtitle=A Lambda Architecture Data Platform",
-        "-V", "author=G.W. Niranga Niluminda (Dev A) \\\\and Dev B",
+        "-V", "author=Niluminda G.W.N, EG/2021/4691 (Dev A) \\\\and Niroshan I.J, EG/2021/4695 (Dev B) \\\\and Kavinda S.O, EG/2021/4608 (Dev C)",
         "-V", "date=EC8203 Applied Big Data Engineering --- Mini Project Report",
         "--syntax-highlighting=tango",
         "--include-in-header=header.tex",
@@ -60,6 +60,40 @@ identifiers like `daily_energy_reconciliation` from overflowing the margin in
 running text) and `fvextra` line-wrapping for fenced code blocks (so the
 `services/<name>/src/<pkg>/` tree in §3.4 wraps instead of clipping at the
 page edge).
+
+## Screenshots
+
+§9 Results references 9 named slots — `../screenshots/01-compose-ps.png`
+through `09-correlated-logs.png` — each right after the paragraph it
+illustrates. Every slot currently holds a generated placeholder (light grey,
+labelled "PLACEHOLDER" plus its own filename) so the build works out of the
+box; `prep_latex_md.py` rewrites each `screenshots/...` reference in the
+markdown to an absolute path so pandoc finds them regardless of its working
+directory, and `header.tex`'s `\floatplacement{figure}{H}` keeps each image
+pinned immediately after its paragraph instead of LaTeX floating it
+elsewhere on the page.
+
+**To swap in a real screenshot:** take it, save/rename it to the exact slot
+filename (e.g. `01-compose-ps.png`), and overwrite the placeholder at
+`docs/report/screenshots/<name>.png` — same name, so nothing in the markdown
+or this build script needs to change. Then just re-run the Build steps above.
+Full slot list and what each one should show:
+
+| File | Capture |
+|---|---|
+| `01-compose-ps.png` | Terminal: `docker compose ... ps` — all 10 containers healthy |
+| `02-prometheus-targets.png` | Prometheus `/targets` — all rows `UP` |
+| `03-grafana-live-timeseries.png` | Grafana's live load/solar-by-zone panel |
+| `04-airflow-dag-graph.png` | Airflow Graph tab — all 6 tasks green |
+| `05-billing-api-final.png` | Swagger UI — `GET /api/billing/daily/{date}`, `"status": "final"` visible |
+| `06-billing-report-html.png` | The rendered `reports/published/billing_report_<date>.html` |
+| `07-grafana-dashboard-full.png` | The full "Smart Grid Overview" dashboard, all 4 panels |
+| `08-alerts.png` | The `alerts` table or Grafana's "Open Alerts" panel |
+| `09-correlated-logs.png` | `docker compose logs` for one `business_date`, several services |
+
+To regenerate a placeholder (e.g. reset one back after a bad capture):
+`python3 gen_placeholders.py --force` (omit `--force` to only fill slots
+that don't exist yet, e.g. on a fresh checkout).
 
 ## Known constraint on the Markdown source
 

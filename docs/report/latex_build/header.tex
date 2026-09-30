@@ -4,6 +4,13 @@
 \usepackage{newtxmath}
 \usepackage{microtype}
 \setlength{\emergencystretch}{1.5em}
+
+% Pandoc's image-to-figure conversion lets LaTeX float figures away from
+% their source position by default -- bad here, since each screenshot must
+% stay right after the paragraph describing it. Force figures to render
+% exactly where they appear in the text instead.
+\usepackage{float}
+\floatplacement{figure}{H}
 \usepackage{fvextra}
 \fvset{breaklines=true,breakanywhere=true}
 \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}

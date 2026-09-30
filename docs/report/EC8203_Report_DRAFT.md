@@ -531,21 +531,45 @@ surfaced two configuration bugs of their own — see §10.
 
 The platform was run as one full `make up-full` stack (`SIM_DAY_SECONDS=180`,
 200 households across 6 zones) and taken through a complete simulated day,
-end to end. Every result below is from that run; the `[SCREENSHOT: ...]`
-placeholders mark where a visual capture from the recorded demo replaces the
-text description — the underlying numbers match, since it's the same
-pipeline.
+end to end. Every result below is from that run.
 
-- **[SCREENSHOT: `docker compose ... ps`]** — all 10 containers healthy simultaneously (confirmed).
-- **[SCREENSHOT: Prometheus `/targets`]** — every service's `/metrics` endpoint `UP`.
-- **Speed layer, live:** `GET /api/realtime/zones` returned all 6 zones updating continuously, e.g. zone-central at simulated 04:15: `total_consumption_kwh=0.0043`, `active_meter_count=32` (of ~33 households in that zone), `renewable_pct=0.0` (correctly zero — simulated night, no solar). **[SCREENSHOT: Grafana live time-series panel]**
-- **[SCREENSHOT: Airflow UI]** — `daily_energy_reconciliation`, all 6 tasks (`validate_feed → wait_for_lake → run_batch → dq_gate → publish_report → record_run`) green for `business_date=2026-01-01`.
-- **Batch layer, authoritative:** `daily_household_billing` — **200 rows** (one per household, confirming the "every active household billed exactly once" data-quality assertion held), total net billed **6,204.86 LKR**, individual bills ranging **-0.16 to 185.96 LKR** (the small negative value is a household that exported more solar than it imported that day — a correct net-credit case, not a bug). `daily_zone_solar_summary` — 6 rows, consumption 25–52 kWh per zone for the day, renewable contribution 0.44–1.03% (low, consistent with a mostly-nighttime simulated day and with the `LowRenewableRule` alerts observed firing during the same run). `batch_runs` recorded `run-2026-01-01 | success | 200 rows_written`.
-- **[SCREENSHOT: `GET /api/billing/daily/2026-01-01`]** — confirmed `"status": "final"` once the batch run completed, versus `"provisional"` beforehand — the live, API-visible expression of the Lambda merge rule from §2/§3.
-- **[SCREENSHOT: `billing_report_2026-01-01.html`]** — rendered and published to `reports/published/`.
-- **[SCREENSHOT: Grafana dashboard]** — the provisioned "Smart Grid Overview" dashboard (4 panels: live load/solar by zone, current renewable %, open alerts, latest billing).
-- **Alerting, confirmed firing correctly:** `LowRenewableRule` fired for all 6 zones during the low-solar period of the run (matching the low renewable_pct figures above) and correctly resolved once conditions cleared, visible as a mix of open/resolved rows in `alerts`; `NoDataRule` was also observed firing and clearing. **[SCREENSHOT: `alerts` table / Grafana "Open Alerts" panel]**
-- **[SCREENSHOT: correlated logs]** — `docker compose logs` for `business_date=2026-01-01`, showing the same date threading through `batch-file-generator` → `ingestion` → `batch-processor` → Airflow.
+**All containers healthy.** `docker compose ... ps` — all 10 containers up simultaneously.
+
+![All 10 containers healthy simultaneously.](screenshots/01-compose-ps.png){ width=90% }
+
+**Observability plumbing confirmed.** Prometheus's Targets page — every service's `/metrics` endpoint `UP`.
+
+![Prometheus targets, all healthy.](screenshots/02-prometheus-targets.png){ width=90% }
+
+**Speed layer, live:** `GET /api/realtime/zones` returned all 6 zones updating continuously, e.g. zone-central at simulated 04:15: `total_consumption_kwh=0.0043`, `active_meter_count=32` (of ~33 households in that zone), `renewable_pct=0.0` (correctly zero — simulated night, no solar).
+
+![Grafana's live time-series panel — grid load and solar by zone.](screenshots/03-grafana-live-timeseries.png){ width=90% }
+
+**Batch layer orchestrated.** `daily_energy_reconciliation`, all 6 tasks (`validate_feed → wait_for_lake → run_batch → dq_gate → publish_report → record_run`) green for `business_date=2026-01-01`.
+
+![Airflow Graph view, all 6 tasks green.](screenshots/04-airflow-dag-graph.png){ width=90% }
+
+**Batch layer, authoritative:** `daily_household_billing` — **200 rows** (one per household, confirming the "every active household billed exactly once" data-quality assertion held), total net billed **6,204.86 LKR**, individual bills ranging **-0.16 to 185.96 LKR** (the small negative value is a household that exported more solar than it imported that day — a correct net-credit case, not a bug). `daily_zone_solar_summary` — 6 rows, consumption 25–52 kWh per zone for the day, renewable contribution 0.44–1.03% (low, consistent with a mostly-nighttime simulated day and with the `LowRenewableRule` alerts observed firing during the same run). `batch_runs` recorded `run-2026-01-01 | success | 200 rows_written`.
+
+**Authoritative result, API-visible.** `GET /api/billing/daily/2026-01-01` — confirmed `"status": "final"` once the batch run completed, versus `"provisional"` beforehand — the live, API-visible expression of the Lambda merge rule from §2/§3.
+
+![Serving API response for the closed day: `"status": "final"`.](screenshots/05-billing-api-final.png){ width=90% }
+
+**Human-readable report.** The rendered `billing_report_2026-01-01.html`, published to `reports/published/`.
+
+![Rendered daily billing / solar-contribution report.](screenshots/06-billing-report-html.png){ width=90% }
+
+**Consolidated dashboard.** The provisioned "Smart Grid Overview" dashboard (4 panels: live load/solar by zone, current renewable %, open alerts, latest billing).
+
+![Grafana "Smart Grid Overview" dashboard, all 4 panels.](screenshots/07-grafana-dashboard-full.png){ width=90% }
+
+**Alerting, confirmed firing correctly:** `LowRenewableRule` fired for all 6 zones during the low-solar period of the run (matching the low renewable_pct figures above) and correctly resolved once conditions cleared, visible as a mix of open/resolved rows in `alerts`; `NoDataRule` was also observed firing and clearing.
+
+![The `alerts` table / Grafana "Open Alerts" panel.](screenshots/08-alerts.png){ width=90% }
+
+**Correlated logs.** `docker compose logs` for `business_date=2026-01-01`, showing the same date threading through `batch-file-generator` → `ingestion` → `batch-processor` → Airflow.
+
+![Correlated logs across services for one business_date.](screenshots/09-correlated-logs.png){ width=90% }
 
 One concrete reconciliation example: household `HH-00000` (zone-north, flat
 tariff, rate 30.7232 LKR/kWh) consumed 3.0547 kWh and self-generated 0.0131 kWh
