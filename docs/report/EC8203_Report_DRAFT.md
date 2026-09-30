@@ -4,7 +4,7 @@
 
 **Module:** EC8203 Applied Big Data Engineering
 **Repository:** <https://github.com/NirangaNiluminda/smart-grid-lambda-platform>
-**Authors:** G.W. Niranga Niluminda (Dev A — Foundation & Ingestion) · _\<Dev B name\>_ (Dev B — Processing, Serving & Observability)
+**Authors:** Niluminda G.W.N, EG/2021/4691 (Dev A — Foundation & Ingestion) · Niroshan I.J, EG/2021/4695 (Dev B — Processing, Serving & Observability) · Kavinda S.O, EG/2021/4608 (Dev C — Processing, Serving & Observability)
 
 ---
 
@@ -675,8 +675,9 @@ troubleshooting.
 
 | Developer | Scope |
 |---|---|
-| **Dev A — G.W. Niranga Niluminda** | Architecture decision & ADRs; `energy_common` shared kernel (domain models, ports, config, logging, sim-clock, Kafka/Postgres/Parquet adapters); both simulated sources (`meter-simulator`, `batch-file-generator`); Kafka ingestion → Parquet master dataset; database schema; Part 1 Docker Compose; project documentation set; post-merge hardening of the Part 2 processing layers (see below). |
-| **Dev B — _\<name\>_** | Initial implementation of the speed layer, batch layer, Airflow orchestration, serving API, and observability alert-engine + Grafana dashboard. |
+| **Dev A — Niluminda G.W.N (EG/2021/4691)** | Architecture decision & ADRs; `energy_common` shared kernel (domain models, ports, config, logging, sim-clock, Kafka/Postgres/Parquet adapters); both simulated sources (`meter-simulator`, `batch-file-generator`); Kafka ingestion → Parquet master dataset; database schema; Part 1 Docker Compose; project documentation set; post-merge hardening of the Part 2 processing layers (see below). |
+| **Dev B — Niroshan I.J (EG/2021/4695)** | Jointly with Dev C: initial implementation of the speed layer, batch layer, Airflow orchestration, serving API, and observability alert-engine + Grafana dashboard. |
+| **Dev C — Kavinda S.O (EG/2021/4608)** | Jointly with Dev B: initial implementation of the speed layer, batch layer, Airflow orchestration, serving API, and observability alert-engine + Grafana dashboard. |
 
 _A short, honest note on the hardening pass: a review before the final submission found that the first
 implementation of the processing layers, while structurally correct and fully
@@ -700,8 +701,8 @@ mismatch, and a filesystem permission issue writing report artifacts — plus,
 in a final pre-recording dry run, two dead observability-config entries
 (a Grafana container gated behind an unused Compose profile, and a Prometheus
 scrape target for a service that is architecturally never scraped). Every one
-of these is documented with its root cause in `TASKS.md`; both authors should
-be able to explain and defend this code in the viva, including the fixes._
+of these is documented with its root cause in `TASKS.md`; all three authors
+should be able to explain and defend this code in the viva, including the fixes._
 
 ### C. Assumptions, simplifications, and simulated-time compression
 

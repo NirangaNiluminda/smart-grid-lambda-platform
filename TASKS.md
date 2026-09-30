@@ -276,5 +276,6 @@ Acceptance criteria per task are in [`docs/PART2_ONBOARDING.md`](docs/PART2_ONBO
 
 | Developer | Scope |
 |---|---|
-| **Dev A — G.W. Niranga Niluminda** | Architecture decision & ADRs, `energy_common` shared kernel, database schema, both simulated sources, Kafka ingestion → Parquet master dataset, Part 1 Docker Compose, project documentation set. |
-| **Dev B — _<name>_** | Speed layer (Spark Structured Streaming), batch layer (Spark billing/solar reconciliation), Airflow orchestration, serving API, observability alert-engine + dashboards, full-stack Compose, end-to-end tests, report results sections. |
+| **Dev A — Niluminda G.W.N (EG/2021/4691)** | Architecture decision & ADRs, `energy_common` shared kernel, database schema, both simulated sources, Kafka ingestion → Parquet master dataset, Part 1 Docker Compose, project documentation set. |
+| **Dev B — Niroshan I.J (EG/2021/4695)** | Jointly with Dev C: speed layer (Spark Structured Streaming), batch layer (Spark billing/solar reconciliation), Airflow orchestration, serving API, observability alert-engine + dashboards, full-stack Compose, end-to-end tests, report results sections. |
+| **Dev C — Kavinda S.O (EG/2021/4608)** | Jointly with Dev B: speed layer (Spark Structured Streaming), batch layer (Spark billing/solar reconciliation), Airflow orchestration, serving API, observability alert-engine + dashboards, full-stack Compose, end-to-end tests, report results sections. |
