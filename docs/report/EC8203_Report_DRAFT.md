@@ -1,18 +1,16 @@
-# Applied Big Data Engineering — Mini Project Report
+# Applied Big Data Engineering - Mini Project Report
 
 ## Smart Grid Energy Monitoring & Billing: A Lambda Architecture Data Platform
 
 **Module:** EC8203 Applied Big Data Engineering
 **Repository:** <https://github.com/NirangaNiluminda/smart-grid-lambda-platform>
-**Authors:** Niluminda G.W.N, EG/2021/4691 (Dev A — Foundation & Ingestion) · Niroshan I.J, EG/2021/4695 (Dev B — Processing, Serving & Observability) · Kavinda S.O, EG/2021/4608 (Dev C — Processing, Serving & Observability)
-
----
+**Authors:** Niluminda G.W.N, EG/2021/4691 (Dev A - Foundation & Ingestion) · Niroshan I.J, EG/2021/4695 (Dev B - Processing, Serving & Observability) · Kavinda S.O, EG/2021/4608 (Dev C - Processing, Serving & Observability)
 
 ## 1. Introduction
 
 ### 1.1 Use case
 
-This project implements **Use Case 3 — Smart Grid Energy Monitoring & Billing**
+This project implements **Use Case 3 - Smart Grid Energy Monitoring & Billing**
 from the assignment brief. A utility company wants two things at once:
 
 1. **Live visibility** into grid load and the renewable (solar) contribution to
@@ -30,7 +28,7 @@ tariff data is applied to their consumption?*
 These are genuinely different problems even though they share a data source.
 The first needs to be fast and can tolerate being slightly wrong (a reading
 that arrives a few seconds late does not materially change "current load").
-The second needs to be exact, auditable, and reproducible — it is a financial
+The second needs to be exact, auditable, and reproducible - it is a financial
 calculation that must reconcile to the cent and must be re-computable if a
 tariff is corrected after the fact. That distinction is the entire justification
 for the architecture chosen in §2.
@@ -53,7 +51,7 @@ average them into the results (see §5 and §6).
 ### 1.3 Assumptions and simplifications
 
 - **Simulated time.** One simulated business day is compressed into
-  `SIM_DAY_SECONDS` wall-clock seconds (600 by default — 10 minutes; the demo
+  `SIM_DAY_SECONDS` wall-clock seconds (600 by default - 10 minutes; the demo
   recording uses a shorter value so a full day-close is visible inside a short
   video). All services derive "what day is it" from a single shared
   `SimClock`, so the streaming source, the daily feed, and the batch
@@ -74,8 +72,6 @@ average them into the results (see §5 and §6).
 - **No authentication** on the serving API or dashboards, consistent with a
   local/demo deployment.
 
----
-
 ## 2. Architecture Decision: Lambda vs Kappa
 
 ### 2.1 The forces
@@ -83,13 +79,13 @@ average them into the results (see §5 and §6).
 | | Real-time zone view | Daily household bill |
 |---|---|---|
 | Latency requirement | seconds | "ready the morning after" |
-| Consistency requirement | eventual / approximate acceptable | strong — must reconcile exactly |
+| Consistency requirement | eventual / approximate acceptable | strong - must reconcile exactly |
 | Input | unbounded, partial stream | one bounded, closed day + a once-daily reference feed |
 | Reprocessing | not meaningful | **required** (a corrected tariff or late data must be re-billable) |
 | Natural trigger | continuous | "business day D has closed" **and** "the feed for D has landed" |
 | Computation | rough per-zone sums over a short window | a per-household join of a full day's consumption × tariff × subsidy, minus a solar export credit |
 
-These are not the same computation at two different freshness levels — they
+These are not the same computation at two different freshness levels - they
 are two different computations with two different correctness models and two
 different consumers. That is precisely the situation Lambda architecture was
 designed for.
@@ -105,8 +101,8 @@ We adopted a **Lambda architecture**:
 - A **batch layer** (Apache Spark batch job, orchestrated by Apache Airflow)
   runs once a simulated day's readings and its tariff/weather feed have both
   landed. It re-derives the authoritative per-household bill and per-zone
-  solar summary from the **immutable master dataset** — every raw reading ever
-  ingested, partitioned by business date in Parquet — so that a corrected
+  solar summary from the **immutable master dataset** - every raw reading ever
+  ingested, partitioned by business date in Parquet - so that a corrected
   tariff or a late-arriving batch of readings can always be reconciled by
   simply re-running the job for that date.
 - A **serving layer** (PostgreSQL + a read-only FastAPI service) merges the
@@ -130,14 +126,14 @@ considered this and rejected it for this use case, for three reasons:
 2. **Reprocessing cost.** Correcting one historical tariff error under Kappa
    means replaying the *entire* meter-reading history through a stateful
    streaming job. Under Lambda, the same correction touches exactly one
-   Parquet partition — the closed day in question — and nothing else.
+   Parquet partition - the closed day in question - and nothing else.
 3. **The assignment's learning objectives and preferred stack** explicitly ask
    for both stream *and* batch processing techniques, and name Airflow for
    "managing batch jobs or reporting pipelines." Kappa would collapse the
    exercise into a single paradigm and leave the batch/orchestration
    objectives undemonstrated.
 
-Kappa's usual advantage — one codebase, no dual logic to keep in sync — is
+Kappa's usual advantage - one codebase, no dual logic to keep in sync - is
 weaker here than it looks, because the two layers are not doing the same
 computation twice: the speed layer computes a rough, live aggregate; the batch
 layer computes an exact, audited one from different inputs (it also needs the
@@ -146,14 +142,12 @@ remaining shared logic (reading validation, the energy-balance split between
 self-consumption and grid import) from drifting between the two layers, both
 the speed and batch implementations import the *same* pure functions from a
 shared library (`energy_common.domain.transforms`) rather than re-implementing
-them — see §6.
+them - see §6.
 
 **When would we choose Kappa instead?** If the requirement were only the
 real-time zone dashboard, with no daily authoritative bill, Kappa's simplicity
 would win outright. The daily bill's need for periodic, bounded, auditable
 recomputation is what tips the decision to Lambda.
-
----
 
 ## 3. Designed Architecture
 
@@ -199,7 +193,7 @@ The speed layer validates and enriches each reading, then computes tumbling
 The batch layer reads one full business day's partition from the Parquet
 master dataset, rolls it up per household, joins it against that day's tariff
 and weather reference files, applies a billing strategy (flat / tiered /
-subsidised — see §6), nets off a solar export credit, and writes
+subsidised - see §6), nets off a solar export credit, and writes
 `daily_household_billing` and `daily_zone_solar_summary`. It also renders a
 human-readable HTML/CSV report artifact.
 
@@ -207,7 +201,7 @@ human-readable HTML/CSV report artifact.
 speed-layer numbers tagged `"status": "provisional"`. For any day the batch
 layer has completed (recorded in a `batch_runs` audit table), it returns the
 batch-layer numbers tagged `"status": "final"`. This tagging is the concrete,
-API-visible expression of the Lambda decision in §2 — a client can always tell
+API-visible expression of the Lambda decision in §2 - a client can always tell
 which layer answered its request.
 
 ### 3.3 One simulated day, sequenced
@@ -261,8 +255,8 @@ services/<name>/src/<pkg>/
 
 The domain layer defines interfaces (`Protocol` classes); the adapters
 implement them; only the composition root imports both sides. This is what
-makes the business logic — window aggregation, billing calculation, alert
-rules — unit-testable with plain fakes, with zero Kafka/Postgres/Spark running.
+makes the business logic - window aggregation, billing calculation, alert
+rules - unit-testable with plain fakes, with zero Kafka/Postgres/Spark running.
 
 ### 3.5 Deployment
 
@@ -285,54 +279,50 @@ flowchart TB
 Compose's multi-file merge. One Postgres instance hosts two databases
 (`energy_serving` for the platform, `airflow` for Airflow's own metadata).
 
----
-
 ## 4. Technology Stack
 
 | Layer | Choice | Why, for this use case |
 |---|---|---|
-| Ingestion / bus | **Apache Kafka** (KRaft) | A durable, partitioned, *replayable* log — replay is how the batch layer's reprocessing story works. Partitioning `meter.readings` by `grid_zone` gives per-zone ordering. |
+| Ingestion / bus | **Apache Kafka** (KRaft) | A durable, partitioned, *replayable* log - replay is how the batch layer's reprocessing story works. Partitioning `meter.readings` by `grid_zone` gives per-zone ordering. |
 | Streaming source | **Python + confluent-kafka** | Brief requires simulated Python sources; confluent-kafka wraps librdkafka for reliable delivery + callbacks used for producer metrics. |
 | Speed layer | **Apache Spark Structured Streaming** | Native event-time windowing + watermarking, exactly-once micro-batch semantics via checkpointing, and the *same* engine/API as the batch layer. |
 | Batch layer | **Apache Spark (batch)** | Reuses the same transform functions as the speed layer; efficient full-day join of the Parquet lake against the daily reference feed; trivially parametrised for backfill. |
-| Orchestration | **Apache Airflow** | The batch layer needs "wait for the feed," "run for an explicit business date," "retry on transient failure," "gate on data-quality checks," "keep an auditable run history," and "alert on failure" — Airflow's job description. |
-| Master dataset | **Parquet on the local filesystem** | Columnar, partitioned by `business_date`, append-only — the property the batch layer's reprocessing depends on. The layout (`readings_raw/business_date=.../`) mirrors an object store, so moving to S3/HDFS is a configuration change, not a rewrite. |
-| Serving store | **PostgreSQL** | Serving queries are small aggregates and point lookups (latest per-zone metrics, one household's bill) — a relational store fits, and it doubles as Airflow's metadata database. |
+| Orchestration | **Apache Airflow** | The batch layer needs "wait for the feed," "run for an explicit business date," "retry on transient failure," "gate on data-quality checks," "keep an auditable run history," and "alert on failure" - Airflow's job description. |
+| Master dataset | **Parquet on the local filesystem** | Columnar, partitioned by `business_date`, append-only - the property the batch layer's reprocessing depends on. The layout (`readings_raw/business_date=.../`) mirrors an object store, so moving to S3/HDFS is a configuration change, not a rewrite. |
+| Serving store | **PostgreSQL** | Serving queries are small aggregates and point lookups (latest per-zone metrics, one household's bill) - a relational store fits, and it doubles as Airflow's metadata database. |
 | Serving API | **FastAPI** | Typed request/response models straight from the shared domain models; automatic OpenAPI docs; one-line Prometheus instrumentation. |
 | Observability | **structlog + prometheus-client + a small rule engine** | JSON logs with bound context everywhere; `/metrics` on every service; alert rules as small, independently unit-testable Strategy objects rather than an opaque PromQL file. |
 | Packaging | **Docker Compose** | One command reproduces the whole platform; each service carries its own image and dependency closure. |
 
 The brief's alternatives were considered and rejected for stated reasons in
-ADR-0002 — most notably **Apache Storm** (no first-class event-time windowing,
+ADR-0002 - most notably **Apache Storm** (no first-class event-time windowing,
 would require a second, different API from the batch layer) and **Cassandra**
 (built for high-volume time-series writes; our serving workload is low-volume
 reads of pre-aggregated data, which plays to Postgres's strengths instead).
 
----
-
 ## 5. Data Ingestion Implementation
 
-### 5.1 Streaming source — `meter-simulator`
+### 5.1 Streaming source - `meter-simulator`
 
 Generates one `MeterReading` per household per tick from a diurnal load curve
 (a baseline plus morning and evening demand peaks) and, for households with
 solar installed, a daytime generation curve modulated by a seasonal
 clear-sky index. Anomalies are injected via a Strategy pattern
 (`AnomalyStrategy`): dropout, negative value, implausible spike, stuck meter,
-zero reading — each independently weighted and unit-tested. Readings are
+zero reading - each independently weighted and unit-tested. Readings are
 published to Kafka `meter.readings`, keyed by `grid_zone`.
 
-### 5.2 Daily batch source — `batch-file-generator`
+### 5.2 Daily batch source - `batch-file-generator`
 
 Watches the shared simulated clock; the instant it detects that a business day
 has closed, it deterministically generates that day's tariff and weather
 reference rows (same household/zone population as the simulator, so the two
 sources can never disagree about who exists), writes both CSVs atomically
-(write-then-rename), and writes the `_SUCCESS_<date>` marker **last** — the
+(write-then-rename), and writes the `_SUCCESS_<date>` marker **last** - the
 signal the batch layer's Airflow DAG waits on. It then calls Airflow's REST
 API to trigger the day's reconciliation run (§6.3).
 
-### 5.3 Ingestion — Kafka → immutable Parquet lake
+### 5.3 Ingestion - Kafka → immutable Parquet lake
 
 Consumes `meter.readings`, decodes each message, and either:
 
@@ -345,7 +335,7 @@ Consumes `meter.readings`, decodes each message, and either:
 
 When the simulated clock advances past a business day, `ingestion` flushes any
 remaining buffered rows for that day and writes its partition's `_SUCCESS`
-marker — the day is now closed and immutable. A reading that arrives for an
+marker - the day is now closed and immutable. A reading that arrives for an
 already-closed day (late data) is still appended as a new file and counted
 separately (`late_arrival_total`), rather than silently dropped.
 
@@ -359,24 +349,22 @@ defined fate: negative and implausible-spike readings are rejected by
 what "bad" means); dropouts are what the `NoDataRule` alert (§8) exists to
 detect; a stuck meter still produces plausible-looking data, which is a
 deliberate reminder in the report that not every anomaly is mechanically
-detectable — see §10.
-
----
+detectable - see §10.
 
 ## 6. Processing Layer Implementation
 
-### 6.1 Speed layer — Spark Structured Streaming
+### 6.1 Speed layer - Spark Structured Streaming
 
 `stream-processor` runs three independent Structured Streaming queries against
 `meter.readings`, each with its own checkpoint:
 
-1. **Ingest + DLQ** — parses each message, splits valid from invalid via a
+1. **Ingest + DLQ** - parses each message, splits valid from invalid via a
    Spark UDF that calls the *same* `validate_reading` function the batch layer
    uses, and writes invalid rows to the DLQ topic with the reason attached.
-2. **Tumbling window (1 minute)** — `groupBy(window(event_timestamp, "1 minute"), grid_zone)` with a 2-minute watermark, aggregating
+2. **Tumbling window (1 minute)** - `groupBy(window(event_timestamp, "1 minute"), grid_zone)` with a 2-minute watermark, aggregating
    `sum(power_consumption_kwh)`, `sum(solar_generation_kwh)` and an
    approximate distinct count of meters, then computing `renewable_pct`.
-3. **Sliding window (5 minutes, sliding every 1 minute)** — the same
+3. **Sliding window (5 minutes, sliding every 1 minute)** - the same
    aggregation with an overlapping window, so a client can see a trend rather
    than only the latest minute.
 
@@ -384,13 +372,13 @@ Each query's `foreachBatch` sink upserts into `rt_zone_metrics` on
 `(grid_zone, window_type, window_start)`. Because Spark's stateful streaming
 aggregation keeps a state store per window across micro-batches, and only
 retires a window once the watermark has passed it, every upsert carries the
-*full* accumulated total for that window at the time of writing — not a
+*full* accumulated total for that window at the time of writing - not a
 partial contribution from whichever micro-batch happened to run. This
 property was specifically checked with a test that feeds the equivalent of
 several separate micro-batches into the same one-minute window and asserts the
 final stored total is the sum of all of them, not just the last one.
 
-### 6.2 Batch layer — Spark batch job
+### 6.2 Batch layer - Spark batch job
 
 `batch-processor` is invoked with an explicit `--business-date`:
 
@@ -401,16 +389,16 @@ final stored total is the sum of all of them, not just the last one.
    than dropping the household from the day entirely.
 3. Reads that day's tariff and weather CSVs, and the population of active
    households from Postgres.
-4. For each household, computes the **energy balance** — how much of its
+4. For each household, computes the **energy balance** - how much of its
    consumption was met by its own solar, how much came from the grid, and how
-   much solar was exported — via the shared
+   much solar was exported - via the shared
    `energy_common.domain.transforms.energy_balance` function (the same
    net-metering split used everywhere a solar/consumption split is needed).
 5. Applies a **billing Strategy** selected by the household's `billing_tier`:
    `FlatBillingStrategy` (a single rate on grid import, less an export
    credit), `TieredBillingStrategy` (block rates with increasing multipliers),
    `SubsidisedBillingStrategy` (a discounted rate on the first block). Each
-   strategy is a small, independently unit-tested class — adding a new tariff
+   strategy is a small, independently unit-tested class - adding a new tariff
    structure means adding one class, not touching the orchestration code.
 6. Runs data-quality assertions before writing anything: every active
    household was billed exactly once, no duplicates, the zone solar summary
@@ -418,11 +406,11 @@ final stored total is the sum of all of them, not just the last one.
    charges, and (a plausibility check) a zone did not report solar generation
    on a day its weather forecast said zero irradiance.
 7. Writes `daily_household_billing` and `daily_zone_solar_summary`
-   (idempotent — re-running the same date fully replaces that date's rows, so
+   (idempotent - re-running the same date fully replaces that date's rows, so
    correcting a tariff and re-running reproduces a clean result) and renders
    an HTML + CSV report.
 
-### 6.3 Orchestration — the `daily_energy_reconciliation` Airflow DAG
+### 6.3 Orchestration - the `daily_energy_reconciliation` Airflow DAG
 
 Task graph: `validate_feed` → `wait_for_lake` → `run_batch` → `dq_gate` →
 `publish_report` → `record_run`, with an `on_failure_callback` that inserts a
@@ -439,7 +427,7 @@ same day.
 
 As verified in a full end-to-end run, that automated REST API call currently
 returns a 403 from Airflow's authorization layer despite confirmed-correct
-credentials and RBAC permissions — an unresolved, time-boxed issue (every
+credentials and RBAC permissions - an unresolved, time-boxed issue (every
 individual piece checked out correct in isolation; the interaction between
 Airflow's auth manager and its session backend is the unresolved part). The
 call is deliberately best-effort (a logged warning, nothing
@@ -452,8 +440,6 @@ getting every layer to actually run together are different problems, and this
 project's later stages (§9, §10) were only possible once the full stack had
 been run as one system rather than validated piece by piece.
 
----
-
 ## 7. Storage & Serving Layer
 
 **Schema** (`infra/postgres/init/`): dimension tables (`dim_zone`,
@@ -461,10 +447,10 @@ been run as one system rather than validated piece by piece.
 batch-layer outputs (`daily_household_billing`, `daily_zone_solar_summary`),
 and two operational tables (`alerts`, `batch_runs`). A dedicated `serving_ro`
 role, granted read-only access, is what the serving API and Grafana actually
-connect as — the platform's own write path (`energy`) is never exposed to a
+connect as - the platform's own write path (`energy`) is never exposed to a
 read-only consumer.
 
-**`serving-api`** is a deliberately thin read model — it contains no
+**`serving-api`** is a deliberately thin read model - it contains no
 aggregation SQL, only lookups and simple filters (a passing test asserts this
 directly, by checking the repository's source for `GROUP BY`/`SUM`/`AVG`).
 Endpoints:
@@ -480,8 +466,6 @@ Endpoints:
 
 The `provisional`/`final` tag on every billing response is the API's explicit,
 inspectable expression of the Lambda merge rule described in §2 and §3.
-
----
 
 ## 8. Observability Design
 
@@ -504,7 +488,7 @@ Postgres and Prometheus data (via a `ContextBuilder` that reads
 | Rule | Condition | Severity |
 |---|---|---|
 | `NoDataRule` | no `rt_zone_metrics` row for a zone within `ALERT_NO_DATA_MINUTES` | critical |
-| `LowRenewableRule` | zone `renewable_pct` below `ALERT_LOW_RENEWABLE_PCT` for 3 consecutive windows | warning — **this is the brief's explicit "renewable contribution considerably low" alert** |
+| `LowRenewableRule` | zone `renewable_pct` below `ALERT_LOW_RENEWABLE_PCT` for 3 consecutive windows | warning - **this is the brief's explicit "renewable contribution considerably low" alert** |
 | `HighRejectRateRule` | rejected/consumed ratio exceeds `ALERT_MAX_REJECT_RATE` | warning |
 | `BatchFailureRule` | yesterday's batch run failed or wrote zero rows | critical |
 
@@ -523,9 +507,7 @@ scraped service healthy, and Grafana's provisioned "Smart Grid Overview"
 dashboard (a Postgres datasource and a Prometheus datasource, both
 auto-provisioned from `infra/grafana/provisioning/`) loads and renders the
 same numbers the API returns. Getting both of these actually reachable
-surfaced two configuration bugs of their own — see §10.
-
----
+surfaced two configuration bugs of their own - see §10.
 
 ## 9. Results
 
@@ -533,25 +515,25 @@ The platform was run as one full `make up-full` stack (`SIM_DAY_SECONDS=180`,
 200 households across 6 zones) and taken through a complete simulated day,
 end to end. Every result below is from that run.
 
-**All containers healthy.** `docker compose ... ps` — all 10 containers up simultaneously.
+**All containers healthy.** `docker compose ... ps` - all 10 containers up simultaneously.
 
 ![All 10 containers healthy simultaneously.](screenshots/01-compose-ps.png){ width=90% }
 
-**Observability plumbing confirmed.** Prometheus's Targets page — every service's `/metrics` endpoint `UP`.
+**Observability plumbing confirmed.** Prometheus's Targets page - every service's `/metrics` endpoint `UP`.
 
 ![Prometheus targets, all healthy.](screenshots/02-prometheus-targets.png){ width=90% }
 
-**Speed layer, live:** `GET /api/realtime/zones` returned all 6 zones updating continuously, e.g. zone-central at simulated 04:15: `total_consumption_kwh=0.0043`, `active_meter_count=32` (of ~33 households in that zone), `renewable_pct=0.0` (correctly zero — simulated night, no solar).
+**Speed layer, live:** `GET /api/realtime/zones` returned all 6 zones updating continuously, e.g. zone-central at simulated 04:15: `total_consumption_kwh=0.0043`, `active_meter_count=32` (of ~33 households in that zone), `renewable_pct=0.0` (correctly zero - simulated night, no solar).
 
-![Grafana's live time-series panel — grid load and solar by zone.](screenshots/03-grafana-live-timeseries.png){ width=90% }
+![Grafana's live time-series panel - grid load and solar by zone.](screenshots/03-grafana-live-timeseries.png){ width=90% }
 
 **Batch layer orchestrated.** `daily_energy_reconciliation`, all 6 tasks (`validate_feed → wait_for_lake → run_batch → dq_gate → publish_report → record_run`) green for `business_date=2026-01-01`.
 
 ![Airflow Graph view, all 6 tasks green.](screenshots/04-airflow-dag-graph.png){ width=90% }
 
-**Batch layer, authoritative:** `daily_household_billing` — **200 rows** (one per household, confirming the "every active household billed exactly once" data-quality assertion held), total net billed **6,204.86 LKR**, individual bills ranging **-0.16 to 185.96 LKR** (the small negative value is a household that exported more solar than it imported that day — a correct net-credit case, not a bug). `daily_zone_solar_summary` — 6 rows, consumption 25–52 kWh per zone for the day, renewable contribution 0.44–1.03% (low, consistent with a mostly-nighttime simulated day and with the `LowRenewableRule` alerts observed firing during the same run). `batch_runs` recorded `run-2026-01-01 | success | 200 rows_written`.
+**Batch layer, authoritative:** `daily_household_billing` - **200 rows** (one per household, confirming the "every active household billed exactly once" data-quality assertion held), total net billed **6,204.86 LKR**, individual bills ranging **-0.16 to 185.96 LKR** (the small negative value is a household that exported more solar than it imported that day - a correct net-credit case, not a bug). `daily_zone_solar_summary` - 6 rows, consumption 25–52 kWh per zone for the day, renewable contribution 0.44–1.03% (low, consistent with a mostly-nighttime simulated day and with the `LowRenewableRule` alerts observed firing during the same run). `batch_runs` recorded `run-2026-01-01 | success | 200 rows_written`.
 
-**Authoritative result, API-visible.** `GET /api/billing/daily/2026-01-01` — confirmed `"status": "final"` once the batch run completed, versus `"provisional"` beforehand — the live, API-visible expression of the Lambda merge rule from §2/§3.
+**Authoritative result, API-visible.** `GET /api/billing/daily/2026-01-01` - confirmed `"status": "final"` once the batch run completed, versus `"provisional"` beforehand - the live, API-visible expression of the Lambda merge rule from §2/§3.
 
 ![Serving API response for the closed day: `"status": "final"`.](screenshots/05-billing-api-final.png){ width=90% }
 
@@ -567,11 +549,9 @@ end to end. Every result below is from that run.
 
 One concrete reconciliation example: household `HH-00000` (zone-north, flat
 tariff, rate 30.7232 LKR/kWh) consumed 3.0547 kWh and self-generated 0.0131 kWh
-of solar over the day, importing 3.0416 kWh from the grid and exporting none —
+of solar over the day, importing 3.0416 kWh from the grid and exporting none -
 net bill **93.45 LKR**, energy charge in full since the household had no
 export credit that day.
-
----
 
 ## 10. Limitations, Trade-offs, and Production-Scale Changes
 
@@ -580,7 +560,7 @@ similar work. We mitigate drift by sharing the actual validation and
 energy-balance functions between the speed and batch layers rather than
 re-implementing them, and by the design decision that the two layers compute
 genuinely different things (approximate/live vs. exact/audited) rather than
-the same thing twice — but the operational cost of running and monitoring two
+the same thing twice - but the operational cost of running and monitoring two
 processing paths instead of one is real and would be weighed against Kappa
 again if requirements changed (§2.3).
 
@@ -615,7 +595,7 @@ hand-rolled version check.
 
 **Anomaly detection is rule-based, not mechanically complete.** The "stuck
 meter" anomaly deliberately produces data that is *not* rejected by
-`validate_reading` (a repeated plausible value is not, by itself, invalid) —
+`validate_reading` (a repeated plausible value is not, by itself, invalid) -
 it is a reminder that some real-world failure modes look identical to normal
 operation from a single reading's perspective and would need a stateful
 detector (e.g. "this meter has reported an identical value for N consecutive
@@ -646,24 +626,22 @@ is deliberately never a long-running container (it's a one-shot job Airflow
 invokes in-process), so the Targets page showed a permanently misleading
 `DOWN` row for a service that was never supposed to be scraped in the first
 place. Neither was caught by any test, because tests exercise the pipeline's
-logic, not whether a dashboard link actually resolves — the lesson generalises
+logic, not whether a dashboard link actually resolves - the lesson generalises
 beyond this project: a monitoring stack's own wiring can drift from what it
 claims to monitor, and the only real check is opening the link.
 
 **Cross-service automation is more fragile than any single service.** The
 Airflow REST-API trigger (§6.3) is the clearest example encountered in this
-project: every individual piece — the DAG, the credentials, the RBAC
-permissions — was independently verified correct, yet the end-to-end call
+project: every individual piece - the DAG, the credentials, the RBAC
+permissions - was independently verified correct, yet the end-to-end call
 still fails, and the actual cause (an auth-manager-specific interaction this
 Airflow version's own documentation doesn't fully cover) is more expensive to
-find than any bug within one service's own code. The mitigation used here —
+find than any bug within one service's own code. The mitigation used here -
 make the automated path best-effort with a fallback that goes around the
 fragile hop entirely (the CLI against the metadata database, not the REST API)
-— is the general lesson: a distributed pipeline's weakest points are usually
+- is the general lesson: a distributed pipeline's weakest points are usually
 the integrations between components, not the components themselves, and each
 one is worth a fallback, not just a retry.
-
----
 
 ## Appendix
 
@@ -687,20 +665,20 @@ Prometheus `localhost:9090/targets`.
 
 | Developer | Scope |
 |---|---|
-| **Dev A — Niluminda G.W.N (EG/2021/4691)** | Architecture decision & ADRs; `energy_common` shared kernel (domain models, ports, config, logging, sim-clock, Kafka/Postgres/Parquet adapters); both simulated sources (`meter-simulator`, `batch-file-generator`); Kafka ingestion → Parquet master dataset; database schema; Part 1 Docker Compose; project documentation set; post-merge hardening of the Part 2 processing layers (see below). |
-| **Dev B — Niroshan I.J (EG/2021/4695)** | Initial implementation of the speed layer (`stream-processor` — Spark Structured Streaming, windowed per-zone aggregation, DLQ routing); `serving-api` (FastAPI read model, all endpoints); observability (`alert-engine`'s rule-evaluation loop, Grafana "Smart Grid Overview" dashboard provisioning). |
-| **Dev C — Kavinda S.O (EG/2021/4608)** | Initial implementation of the batch layer (`batch-processor` — Spark batch billing/solar reconciliation, the billing Strategy classes); Airflow orchestration (the `daily_energy_reconciliation` DAG, task graph, sensors and retries); the Part 2 Docker Compose overlay; end-to-end integration tests. |
+| **Dev A - Niluminda G.W.N (EG/2021/4691)** | Architecture decision & ADRs; `energy_common` shared kernel (domain models, ports, config, logging, sim-clock, Kafka/Postgres/Parquet adapters); both simulated sources (`meter-simulator`, `batch-file-generator`); Kafka ingestion → Parquet master dataset; database schema; Part 1 Docker Compose; project documentation set; post-merge hardening of the Part 2 processing layers (see below). |
+| **Dev B - Niroshan I.J (EG/2021/4695)** | Initial implementation of the speed layer (`stream-processor` - Spark Structured Streaming, windowed per-zone aggregation, DLQ routing); `serving-api` (FastAPI read model, all endpoints); observability (`alert-engine`'s rule-evaluation loop, Grafana "Smart Grid Overview" dashboard provisioning). |
+| **Dev C - Kavinda S.O (EG/2021/4608)** | Initial implementation of the batch layer (`batch-processor` - Spark batch billing/solar reconciliation, the billing Strategy classes); Airflow orchestration (the `daily_energy_reconciliation` DAG, task graph, sensors and retries); the Part 2 Docker Compose overlay; end-to-end integration tests. |
 
 _A short, honest note on the hardening pass: a review before the final submission found that the first
 implementation of the processing layers, while structurally correct and fully
-unit-tested, had issues that only surfaced under real execution — the speed
+unit-tested, had issues that only surfaced under real execution - the speed
 layer's windowed totals could undercount, the alerting rules were never fed
 live data, the Airflow image could not run the batch job, and the DAG's
 schedule would never fire inside a compressed demo. These were fixed in a
 follow-up pass (rewriting the speed and batch layers onto genuine Spark, and
-wiring the alert engine and orchestration to real data). A second pass —
+wiring the alert engine and orchestration to real data). A second pass -
 actually running the entire `make up-full` stack together as one system for
-the first time, rather than validating each service in isolation — found and
+the first time, rather than validating each service in isolation - found and
 fixed ten further bugs no unit or isolated-integration test could have caught:
 an unpinned base image that broke a JDK install, `.env` silently never being
 read by any script or Makefile target, a missing restart policy that turned a
@@ -709,7 +687,7 @@ wrong way in the seed script, a crash-looping alert-engine on any single bad
 cycle, three separate layers of an Airflow authentication misconfiguration,
 a DAG that had **never once successfully parsed** (a reserved-parameter-name
 collision with Airflow's `@task` decorator), a SQLAlchemy 1.4/2.0 import
-mismatch, and a filesystem permission issue writing report artifacts — plus,
+mismatch, and a filesystem permission issue writing report artifacts - plus,
 in a final pre-recording dry run, two dead observability-config entries
 (a Grafana container gated behind an unused Compose profile, and a Prometheus
 scrape target for a service that is architecturally never scraped). Every one

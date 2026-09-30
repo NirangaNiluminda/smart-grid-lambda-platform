@@ -20,8 +20,7 @@ text = SRC.read_text(encoding="utf-8")
 
 # Drop the hand-written title block: pandoc's own title page, built from
 # -M title/author/date in the build command, replaces it.
-text = text.split("---\n\n## 1. Introduction", 1)[1]
-text = "## 1. Introduction" + text
+text = "## 1. Introduction" + text.split("## 1. Introduction", 1)[1]
 
 captions = [
     "System context: simulated sources, the data platform, and consumers.",

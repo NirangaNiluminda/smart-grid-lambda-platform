@@ -47,7 +47,7 @@ pypandoc.convert_file(
         "-V", "title=Smart Grid Energy Monitoring \\\\& Billing",
         "-V", "subtitle=A Lambda Architecture Data Platform",
         "-V", "author=Niluminda G.W.N, EG/2021/4691 (Dev A) \\\\and Niroshan I.J, EG/2021/4695 (Dev B) \\\\and Kavinda S.O, EG/2021/4608 (Dev C)",
-        "-V", "date=EC8203 Applied Big Data Engineering --- Mini Project Report",
+        "-V", "date=EC8203 Applied Big Data Engineering - Mini Project Report",
         "--syntax-highlighting=tango",
         "--include-in-header=header.tex",
     ],
