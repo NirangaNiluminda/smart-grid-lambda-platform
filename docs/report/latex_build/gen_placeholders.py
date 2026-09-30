@@ -1,6 +1,6 @@
-"""Regenerates the 9 placeholder images in ../screenshots/ (only the ones
-that don't already exist, unless --force is passed). Run once to bootstrap
-a fresh checkout before the real screenshots are captured, or with --force
+"""Regenerates placeholder images in ../screenshots/ (only the ones that
+don't already exist, unless --force is passed). Run once to bootstrap a
+fresh checkout before the real screenshots are captured, or with --force
 to reset a slot back to its placeholder. Requires Pillow (`pip install pillow`).
 """
 
@@ -19,9 +19,6 @@ SLOTS = [
     ("04-airflow-dag-graph.png", "Airflow: Graph tab", "6 tasks green"),
     ("05-billing-api-final.png", "Swagger UI: GET /api/billing/daily/{date}", '"status": "final"'),
     ("06-billing-report-html.png", "reports/published/billing_report_<date>.html", "rendered report"),
-    ("07-grafana-dashboard-full.png", 'Grafana: "Smart Grid Overview"', "all 4 panels"),
-    ("08-alerts.png", "alerts table / Grafana Open Alerts panel", "fired + resolved rows"),
-    ("09-correlated-logs.png", "docker compose logs (one business_date)", "batch-file-generator -> ingestion -> batch-processor -> airflow"),
 ]
 
 W, H = 1600, 900

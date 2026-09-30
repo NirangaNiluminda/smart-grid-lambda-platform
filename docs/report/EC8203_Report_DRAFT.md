@@ -559,17 +559,11 @@ end to end. Every result below is from that run.
 
 ![Rendered daily billing / solar-contribution report.](screenshots/06-billing-report-html.png){ width=90% }
 
-**Consolidated dashboard.** The provisioned "Smart Grid Overview" dashboard (4 panels: live load/solar by zone, current renewable %, open alerts, latest billing).
-
-![Grafana "Smart Grid Overview" dashboard, all 4 panels.](screenshots/07-grafana-dashboard-full.png){ width=90% }
+**Consolidated dashboard.** The provisioned "Smart Grid Overview" dashboard (4 panels: live load/solar by zone, current renewable %, open alerts, latest billing) merges both layers into the single view the brief asks for.
 
 **Alerting, confirmed firing correctly:** `LowRenewableRule` fired for all 6 zones during the low-solar period of the run (matching the low renewable_pct figures above) and correctly resolved once conditions cleared, visible as a mix of open/resolved rows in `alerts`; `NoDataRule` was also observed firing and clearing.
 
-![The `alerts` table / Grafana "Open Alerts" panel.](screenshots/08-alerts.png){ width=90% }
-
-**Correlated logs.** `docker compose logs` for `business_date=2026-01-01`, showing the same date threading through `batch-file-generator` → `ingestion` → `batch-processor` → Airflow.
-
-![Correlated logs across services for one business_date.](screenshots/09-correlated-logs.png){ width=90% }
+**Correlated logs.** `docker compose logs` for `business_date=2026-01-01` shows the same date threading through `batch-file-generator` → `ingestion` → `batch-processor` → Airflow, confirming every stage agrees on which business day it's processing.
 
 One concrete reconciliation example: household `HH-00000` (zone-north, flat
 tariff, rate 30.7232 LKR/kWh) consumed 3.0547 kWh and self-generated 0.0131 kWh

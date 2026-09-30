@@ -63,21 +63,19 @@ page edge).
 
 ## Screenshots
 
-§9 Results references 9 named slots — `../screenshots/01-compose-ps.png`
-through `09-correlated-logs.png` — each right after the paragraph it
-illustrates. Every slot currently holds a generated placeholder (light grey,
-labelled "PLACEHOLDER" plus its own filename) so the build works out of the
-box; `prep_latex_md.py` rewrites each `screenshots/...` reference in the
-markdown to an absolute path so pandoc finds them regardless of its working
-directory, and `header.tex`'s `\floatplacement{figure}{H}` keeps each image
-pinned immediately after its paragraph instead of LaTeX floating it
-elsewhere on the page.
+§9 Results references 6 named slots — `../screenshots/01-compose-ps.png`
+through `06-billing-report-html.png` (all filled with real captures) — each
+right after the paragraph it illustrates. `prep_latex_md.py` rewrites each
+`screenshots/...` reference in the markdown to an absolute path so pandoc
+finds them regardless of its working directory, and `header.tex`'s
+`\floatplacement{figure}{H}` keeps each image pinned immediately after its
+paragraph instead of LaTeX floating it elsewhere on the page.
 
-**To swap in a real screenshot:** take it, save/rename it to the exact slot
-filename (e.g. `01-compose-ps.png`), and overwrite the placeholder at
-`docs/report/screenshots/<name>.png` — same name, so nothing in the markdown
-or this build script needs to change. Then just re-run the Build steps above.
-Full slot list and what each one should show:
+The results for the dashboard, alerts, and correlated-logs points (originally
+slots `07`–`09`) are covered in prose only, without a dedicated screenshot —
+add one back the same way as the others if wanted: reference
+`screenshots/NN-name.png` in the markdown at that point, add an entry to
+`gen_placeholders.py`'s `SLOTS` list, drop the real file in, rebuild.
 
 | File | Capture |
 |---|---|
@@ -87,9 +85,6 @@ Full slot list and what each one should show:
 | `04-airflow-dag-graph.png` | Airflow Graph tab — all 6 tasks green |
 | `05-billing-api-final.png` | Swagger UI — `GET /api/billing/daily/{date}`, `"status": "final"` visible |
 | `06-billing-report-html.png` | The rendered `reports/published/billing_report_<date>.html` |
-| `07-grafana-dashboard-full.png` | The full "Smart Grid Overview" dashboard, all 4 panels |
-| `08-alerts.png` | The `alerts` table or Grafana's "Open Alerts" panel |
-| `09-correlated-logs.png` | `docker compose logs` for one `business_date`, several services |
 
 To regenerate a placeholder (e.g. reset one back after a bad capture):
 `python3 gen_placeholders.py --force` (omit `--force` to only fill slots
