@@ -78,8 +78,6 @@ average them into the results (see §5 and §6).
 
 ## 2. Architecture Decision: Lambda vs Kappa
 
-*(Full written decision record: see ADR-0001 in* `docs/decisions/`*.)*
-
 ### 2.1 The forces
 
 | | Real-time zone view | Daily household bill |
@@ -158,8 +156,6 @@ recomputation is what tips the decision to Lambda.
 ---
 
 ## 3. Designed Architecture
-
-*(Source diagrams: `docs/ARCHITECTURE.md`.)*
 
 ### 3.1 Context
 
@@ -292,9 +288,6 @@ Compose's multi-file merge. One Postgres instance hosts two databases
 ---
 
 ## 4. Technology Stack
-
-*(Full justification with rejected alternatives per component: see ADR-0002
-in* `docs/decisions/`*.)*
 
 | Layer | Choice | Why, for this use case |
 |---|---|---|
@@ -446,8 +439,10 @@ same day.
 
 As verified in a full end-to-end run, that automated REST API call currently
 returns a 403 from Airflow's authorization layer despite confirmed-correct
-credentials and RBAC permissions — an unresolved, time-boxed issue documented
-in `TASKS.md`. The call is deliberately best-effort (a logged warning, nothing
+credentials and RBAC permissions — an unresolved, time-boxed issue (every
+individual piece checked out correct in isolation; the interaction between
+Airflow's auth manager and its session backend is the unresolved part). The
+call is deliberately best-effort (a logged warning, nothing
 crashes), and the **manual trigger**,
 `airflow dags trigger daily_energy_reconciliation -e <date>`, is unaffected (it goes through the
 Airflow CLI against the metadata database directly, not the REST API) and is
@@ -489,8 +484,6 @@ inspectable expression of the Lambda merge rule described in §2 and §3.
 ---
 
 ## 8. Observability Design
-
-*(Full detail: `docs/OBSERVABILITY.md`.)*
 
 **Structured logging.** Every service logs JSON to stdout via a shared
 `structlog` setup, with mandatory fields (`ts, level, service, event`) and
@@ -539,9 +532,9 @@ surfaced two configuration bugs of their own — see §10.
 The platform was run as one full `make up-full` stack (`SIM_DAY_SECONDS=180`,
 200 households across 6 zones) and taken through a complete simulated day,
 end to end. Every result below is from that run; the `[SCREENSHOT: ...]`
-placeholders mark where a visual capture from your own recording (see
-`docs/report/DEMO_RECORDING_PLAN.md`) replaces the text description —
-the underlying numbers should match, since it's the same pipeline.
+placeholders mark where a visual capture from the recorded demo replaces the
+text description — the underlying numbers match, since it's the same
+pipeline.
 
 - **[SCREENSHOT: `docker compose ... ps`]** — all 10 containers healthy simultaneously (confirmed).
 - **[SCREENSHOT: Prometheus `/targets`]** — every service's `/metrics` endpoint `UP`.
@@ -668,8 +661,9 @@ make topics
 make seed
 ```
 
-See `docs/DEV_SETUP.md` and `docs/RUNBOOK.md` for full detail, ports, and
-troubleshooting.
+Service endpoints once running: Serving API `localhost:8000/docs`, Airflow
+`localhost:8080` (`admin`/`admin`), Grafana `localhost:3000` (`admin`/`admin`),
+Prometheus `localhost:9090/targets`.
 
 ### B. Individual contributions
 
@@ -701,8 +695,8 @@ mismatch, and a filesystem permission issue writing report artifacts — plus,
 in a final pre-recording dry run, two dead observability-config entries
 (a Grafana container gated behind an unused Compose profile, and a Prometheus
 scrape target for a service that is architecturally never scraped). Every one
-of these is documented with its root cause in `TASKS.md`; all three authors
-should be able to explain and defend this code in the viva, including the fixes._
+of these has a known, verified root cause; all three authors should be able
+to explain and defend this code in the viva, including the fixes._
 
 ### C. Assumptions, simplifications, and simulated-time compression
 
