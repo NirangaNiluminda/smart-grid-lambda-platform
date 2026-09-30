@@ -676,8 +676,8 @@ troubleshooting.
 | Developer | Scope |
 |---|---|
 | **Dev A — Niluminda G.W.N (EG/2021/4691)** | Architecture decision & ADRs; `energy_common` shared kernel (domain models, ports, config, logging, sim-clock, Kafka/Postgres/Parquet adapters); both simulated sources (`meter-simulator`, `batch-file-generator`); Kafka ingestion → Parquet master dataset; database schema; Part 1 Docker Compose; project documentation set; post-merge hardening of the Part 2 processing layers (see below). |
-| **Dev B — Niroshan I.J (EG/2021/4695)** | Jointly with Dev C: initial implementation of the speed layer, batch layer, Airflow orchestration, serving API, and observability alert-engine + Grafana dashboard. |
-| **Dev C — Kavinda S.O (EG/2021/4608)** | Jointly with Dev B: initial implementation of the speed layer, batch layer, Airflow orchestration, serving API, and observability alert-engine + Grafana dashboard. |
+| **Dev B — Niroshan I.J (EG/2021/4695)** | Initial implementation of the speed layer (`stream-processor` — Spark Structured Streaming, windowed per-zone aggregation, DLQ routing); `serving-api` (FastAPI read model, all endpoints); observability (`alert-engine`'s rule-evaluation loop, Grafana "Smart Grid Overview" dashboard provisioning). |
+| **Dev C — Kavinda S.O (EG/2021/4608)** | Initial implementation of the batch layer (`batch-processor` — Spark batch billing/solar reconciliation, the billing Strategy classes); Airflow orchestration (the `daily_energy_reconciliation` DAG, task graph, sensors and retries); the Part 2 Docker Compose overlay; end-to-end integration tests. |
 
 _A short, honest note on the hardening pass: a review before the final submission found that the first
 implementation of the processing layers, while structurally correct and fully
