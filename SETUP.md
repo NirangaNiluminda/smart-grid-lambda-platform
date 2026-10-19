@@ -11,7 +11,6 @@ and reconciles a full day of consumption against a once-a-day tariff/weather fee
 to produce an authoritative per-household billing and solar-contribution report.
 
 > **Use case:** Use Case 3 — Smart Grid Energy Monitoring & Billing (from the course brief)
-> [`docs/assignment/`](docs/assignment/EC8203-MiniProject-2026.pdf)).
 >
 > **Business question:** *What is the current grid load and renewable contribution by
 > zone, and what will each household's bill look like once daily tariff data is applied
